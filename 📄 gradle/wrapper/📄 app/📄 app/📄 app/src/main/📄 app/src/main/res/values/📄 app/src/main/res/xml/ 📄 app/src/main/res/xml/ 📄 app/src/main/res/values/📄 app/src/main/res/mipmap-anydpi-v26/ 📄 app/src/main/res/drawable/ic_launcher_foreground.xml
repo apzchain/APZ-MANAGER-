@@ -1,0 +1,20 @@
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+
+    <!-- Shield -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M54,28 L54,28 L76,36 L76,54 C76,66 66,76 54,80 C42,76 32,66 32,54 L32,36 Z"
+        android:strokeWidth="0" />
+
+    <!-- Checkmark -->
+    <path
+        android:fillColor="#0B3D91"
+        android:pathData="M46,54 L52,60 L64,46 L67,49 L52,66 L43,57 Z" />
+</vector>
+```

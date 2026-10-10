@@ -1,0 +1,329 @@
+当然，以下是为你的APZ Wallet项目配置的GitHub Actions工作流，它可以在云端自动构建签名的APK。
+
+---
+
+📁 工作流文件结构
+
+首先，在你的项目根目录创建以下文件：
+
+```
+.github/
+└── workflows/
+    └── build-apk.yml
+```
+
+📄 完整的 build-apk.yml
+
+```yaml
+name: Build APK
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  release:
+    types: [ published ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # ─────────────────────────────────────────
+      # Step 1: Checkout Repository
+      # ─────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ─────────────────────────────────────────
+      # Step 2: Setup Node.js
+      # ─────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ─────────────────────────────────────────
+      # Step 3: Setup Java 17 (Required for Android)
+      # ─────────────────────────────────────────
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # ─────────────────────────────────────────
+      # Step 4: Setup Android SDK
+      # ─────────────────────────────────────────
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ─────────────────────────────────────────
+      # Step 5: Cache Gradle Dependencies
+      # ─────────────────────────────────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: |
+            ${{ runner.os }}-gradle-
+
+      # ─────────────────────────────────────────
+      # Step 6: Install Dependencies
+      # ─────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ─────────────────────────────────────────
+      # Step 7: Build Web Assets
+      # ─────────────────────────────────────────
+      - name: Build web assets
+        run: npm run build
+        # اگر build script ندارید، این خط را حذف کنید
+
+      # ─────────────────────────────────────────
+      # Step 8: Sync Capacitor
+      # ─────────────────────────────────────────
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # ─────────────────────────────────────────
+      # Step 9: Decode Keystore from Secrets
+      # ─────────────────────────────────────────
+      - name: Decode Keystore
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/release.jks
+          echo "✅ Keystore decoded"
+
+      # ─────────────────────────────────────────
+      # Step 10: Build Debug APK
+      # ─────────────────────────────────────────
+      - name: Build Debug APK
+        working-directory: ./android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --stacktrace
+
+      # ─────────────────────────────────────────
+      # Step 11: Build Release APK (Signed)
+      # ─────────────────────────────────────────
+      - name: Build Release APK
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        working-directory: ./android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew assembleRelease \
+            -Pandroid.injected.signing.store.file=release.jks \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injecting.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD" \
+            --stacktrace
+
+      # ─────────────────────────────────────────
+      # Step 12: Verify APK Signature
+      # ─────────────────────────────────────────
+      - name: Verify Release APK Signature
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        working-directory: ./android
+        run: |
+          BUILD_TOOLS=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -1)
+          $ANDROID_HOME/build-tools/${BUILD_TOOLS}/apksigner verify --verbose \
+            app/build/outputs/apk/release/app-release.apk
+
+      # ─────────────────────────────────────────
+      # Step 13: Upload Debug APK as Artifact
+      # ─────────────────────────────────────────
+      - name: Upload Debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: apz-wallet-debug
+          path: android/app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
+
+      # ─────────────────────────────────────────
+      # Step 14: Upload Release APK as Artifact
+      # ─────────────────────────────────────────
+      - name: Upload Release APK
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: apz-wallet-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+          retention-days: 90
+
+      # ─────────────────────────────────────────
+      # Step 15: Attach APK to GitHub Release
+      # ─────────────────────────────────────────
+      - name: Attach APK to Release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            android/app/build/outputs/apk/release/app-release.apk
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # ─────────────────────────────────────────
+      # Step 16: Cleanup Secrets
+      # ─────────────────────────────────────────
+      - name: Cleanup
+        if: always()
+        run: rm -f android/release.jks
+```
+
+🔐 تنظیم GitHub Secrets
+
+در مخزن GitHub، به Settings → Secrets and variables → Actions بروید و چهار Secret زیر را اضافه کنید:
+
+1. KEYSTORE_BASE64
+
+ابتدا یک keystore بسازید (یک‌بار در سیستم خودتان):
+
+```bash
+keytool -genkeypair -v \
+  -keystore apz-release.jks \
+  -alias apz-wallet \
+  -keyalg RSA -keysize 4096 \
+  -validity 10000 \
+  -storetype JKS
+```
+
+سپس آن را به Base64 تبدیل کنید:
+
+```bash
+# Linux / macOS
+base64 -w 0 apz-release.jks > keystore.base64.txt
+
+# Windows (PowerShell)
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("apz-release.jks")) | Out-File -Encoding ASCII keystore.base64.txt
+```
+
+محتوای فایل keystore.base64.txt را در Secret KEYSTORE_BASE64 قرار دهید.
+
+2. KEYSTORE_PASSWORD
+
+رمز keystore که هنگام ساخت وارد کردید.
+
+3. KEY_ALIAS
+
+نام alias که انتخاب کردید (مثلاً apz-wallet).
+
+4. KEY_PASSWORD
+
+رمز alias (ممکن است با رمز keystore یکسان باشد).
+
+⚙️ تنظیمات android/app/build.gradle
+
+برای اینکه signingConfig به‌صورت خودکار از propertyها استفاده کند، این بخش را به android/app/build.gradle اضافه کنید:
+
+```gradle
+android {
+    signingConfigs {
+        release {
+            if (System.getenv("KEYSTORE_PASSWORD")) {
+                storeFile file("release.jks")
+                storePassword System.getenv("KEYSTORE_PASSWORD")
+                keyAlias System.getenv("KEY_ALIAS")
+                keyPassword System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+```
+
+🚀 نحوه استفاده
+
+ساخت خودکار در Push
+
+با هر push به main یا master، یک APK دیباگ ساخته می‌شود و در Actions → Artifacts قابل دانلود است.
+
+ساخت APK ریلیز با تگ
+
+برای ساخت APK امضاشده، یک تگ بسازید:
+
+```bash
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+این کار یک GitHub Release ایجاد می‌کند و APK امضاشده به آن پیوست می‌شود.
+
+ساخت دستی
+
+از Actions → Build APK → Run workflow می‌توانید به‌صورت دستی اجرا کنید.
+
+📋 ساختار خروجی
+
+Artifact مسیر نگهداری
+APK دیباگ android/app/build/outputs/apk/debug/app-debug.apk ۱۴ روز
+APK ریلیز android/app/build/outputs/apk/release/app-release.apk ۹۰ روز
+GitHub Release صفحه Releases دائمی
+
+⚠️ نکات مهم
+
+Java 17 الزامی است. Capacitor 6 و 7 به JDK 17 نیاز دارند. اگر از JDK 11 یا 8 استفاده کنید، build شکست می‌خورد.
+
+Android SDK به‌صورت خودکار نصب می‌شود. روی ubuntu-latest، Android SDK از قبل موجود است و ANDROID_HOME تنظیم شده است. اما استفاده از android-actions/setup-android@v3 برای اطمینان از نصب کامل توصیه می‌شود.
+
+کش Gradle باعث می‌شود build‌های بعدی حدود ۵۰٪ سریع‌تر شوند.
+
+Keystore را هرگز در ریپو commit نکنید. آن را به .gitignore اضافه کنید و فقط از طریق Secrets در CI استفاده کنید.
+
+Workflow Permissions: در Settings → Actions → General → Workflow permissions، گزینه "Read and write permissions" را فعال کنید تا workflow بتواند Release ایجاد کند.
+
+🔄 افزودن AAB برای Play Store (اختیاری)
+
+اگر می‌خواهید AAB هم بسازید، این step را به workflow اضافه کنید:
+
+```yaml
+      - name: Build Release AAB
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        working-directory: ./android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=release.jks \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD" \
+            --stacktrace
+
+      - name: Upload AAB
+        if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: apz-wallet-aab
+          path: android/app/build/outputs/bundle/release/app-release.aab
+          retention-days: 90
+```
+
+AAB در android/app/build/outputs/bundle/release/app-release.aab ساخته می‌شود و برای آپلود به Google Play Console استفاده می‌شود.
+
+---

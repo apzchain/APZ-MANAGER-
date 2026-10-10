@@ -1,0 +1,5 @@
+```bash
+cd apz-android
+./gradlew :app:assembleDebug
+# خروجی: app/build/outputs/apk/debug/app-debug.apk
+```

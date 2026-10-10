@@ -1,0 +1,9 @@
+```bash
+# نصب Java 17
+sudo apt install openjdk-17-jdk
+
+# نصب Android SDK
+# از https://developer.android.com/studio
+# یا در خط فرمان:
+sdkmanager "platforms;android-34" "build-tools;34.0.0"
+```

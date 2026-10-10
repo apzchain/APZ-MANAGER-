@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0a0a1a;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#1a0a2e;stop-opacity:1" />
+    </linearGradient>
+    <linearGradient id="neonGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#00d4ff;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#a855f7;stop-opacity:1" />
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="6" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- پس‌زمینه دایره‌ای -->
+  <circle cx="200" cy="200" r="190" fill="url(#bgGrad)" stroke="url(#neonGrad)" stroke-width="4" filter="url(#glow)"/>
+  
+  <!-- حروف APZ -->
+  <text x="200" y="215" font-family="'Segoe UI', 'Arial Black', sans-serif" font-size="110" font-weight="900" text-anchor="middle" fill="url(#neonGrad)" filter="url(#glow)" letter-spacing="4">APZ</text>
+  
+  <!-- زیرنویس کوچک -->
+  <text x="200" y="270" font-family="'Segoe UI', Arial, sans-serif" font-size="22" font-weight="600" text-anchor="middle" fill="#00d4ff" opacity="0.8" letter-spacing="6">CHAIN</text>
+  
+  <!-- نقطه تزئینی -->
+  <circle cx="200" cy="300" r="3" fill="#a855f7" opacity="0.6"/>
+</svg>

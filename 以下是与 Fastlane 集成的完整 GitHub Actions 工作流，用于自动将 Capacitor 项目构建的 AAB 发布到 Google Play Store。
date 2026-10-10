@@ -1,0 +1,327 @@
+以下是与 Fastlane 集成的完整 GitHub Actions 工作流，用于自动将 Capacitor 项目构建的 AAB 发布到 Google Play Store。
+
+---
+
+📁 文件结构
+
+```
+.github/workflows/
+└── publish-play-store.yml   # 发布到 Play Store 的工作流
+
+android/
+└── fastlane/
+    ├── Appfile              # 包名 + JSON 密钥路径
+    ├── Fastfile             # Lanes 定义
+    └── Gemfile              # Ruby 依赖
+```
+
+📄 1. .github/workflows/publish-play-store.yml
+
+```yaml
+name: Publish to Play Store
+
+on:
+  release:
+    types: [ published ]
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Play Store track'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build AAB & Publish to Play Store
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      # ─────────────────────────────────────────
+      # 1. Checkout
+      # ─────────────────────────────────────────
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ─────────────────────────────────────────
+      # 2. Setup Node.js
+      # ─────────────────────────────────────────
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ─────────────────────────────────────────
+      # 3. Setup JDK 17
+      # ─────────────────────────────────────────
+      - name: Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # ─────────────────────────────────────────
+      # 4. Setup Android SDK
+      # ─────────────────────────────────────────
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      # ─────────────────────────────────────────
+      # 5. Setup Ruby (برای Fastlane)
+      # ─────────────────────────────────────────
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: '3.2'
+          bundler-cache: true
+          working-directory: android
+
+      # ─────────────────────────────────────────
+      # 6. Cache Gradle
+      # ─────────────────────────────────────────
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      # ─────────────────────────────────────────
+      # 7. Install Node Dependencies
+      # ─────────────────────────────────────────
+      - name: Install dependencies
+        run: npm ci
+
+      # ─────────────────────────────────────────
+      # 8. Build Web Assets
+      # ─────────────────────────────────────────
+      - name: Build web assets
+        run: npm run build
+        # اگر build script ندارید، این خط را حذف کنید
+
+      # ─────────────────────────────────────────
+      # 9. Sync Capacitor
+      # ─────────────────────────────────────────
+      - name: Sync Capacitor
+        run: npx cap sync android
+
+      # ─────────────────────────────────────────
+      # 10. Decode Google Play Service Account JSON
+      # ─────────────────────────────────────────
+      - name: Decode Play Store JSON Key
+        env:
+          PLAY_STORE_JSON_BASE64: ${{ secrets.PLAY_STORE_JSON_BASE64 }}
+        run: |
+          mkdir -p android/fastlane
+          echo "$PLAY_STORE_JSON_BASE64" | base64 -d > android/fastlane/play-store-key.json
+          echo "✅ Play Store JSON decoded"
+
+      # ─────────────────────────────────────────
+      # 11. Decode Keystore (برای امضای AAB)
+      # ─────────────────────────────────────────
+      - name: Decode Keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > android/release.jks
+          echo "✅ Keystore decoded"
+
+      # ─────────────────────────────────────────
+      # 12. Build Release AAB
+      # ─────────────────────────────────────────
+      - name: Build Release AAB
+        working-directory: ./android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew bundleRelease \
+            -Pandroid.injected.signing.store.file=release.jks \
+            -Pandroid.injected.signing.store.password="$KEYSTORE_PASSWORD" \
+            -Pandroid.injected.signing.key.alias="$KEY_ALIAS" \
+            -Pandroid.injected.signing.key.password="$KEY_PASSWORD" \
+            --stacktrace
+
+      # ─────────────────────────────────────────
+      # 13. Run Fastlane Supply
+      # ─────────────────────────────────────────
+      - name: Run Fastlane Supply
+        working-directory: ./android
+        env:
+          PLAY_STORE_JSON_KEY_PATH: ${{ github.workspace }}/android/fastlane/play-store-key.json
+          TRACK: ${{ github.event.inputs.track || 'internal' }}
+          LC_ALL: en_US.UTF-8
+          LANG: en_US.UTF-8
+        run: |
+          bundle exec fastlane android deploy \
+            track:"$TRACK" \
+            aab:"${{ github.workspace }}/android/app/build/outputs/bundle/release/app-release.aab"
+
+      # ─────────────────────────────────────────
+      # 14. Cleanup Secrets
+      # ─────────────────────────────────────────
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f android/fastlane/play-store-key.json
+          rm -f android/release.jks
+```
+
+📄 2. android/fastlane/Appfile
+
+```ruby
+# ═══════════════════════════════════════════════
+# APZ Wallet — Fastlane Appfile
+# ═══════════════════════════════════════════════
+
+# مسیر JSON کلید سرویس‌اکانت Google Play
+json_key_file(ENV["PLAY_STORE_JSON_KEY_PATH"] || "fastlane/play-store-key.json")
+
+# نام پکیج اپلیکیشن
+package_name("org.apzchain.wallet")
+```
+
+📄 3. android/fastlane/Fastfile
+
+```ruby
+# ═══════════════════════════════════════════════
+# APZ Wallet — Fastlane Fastfile
+# ═══════════════════════════════════════════════
+
+default_platform(:android)
+
+platform :android do
+
+  # ─────────────────────────────────────────
+  # Lane: Deploy AAB to Play Store
+  # ─────────────────────────────────────────
+  desc "Build and deploy AAB to Google Play Store"
+  lane :deploy do |options|
+    track_name = options[:track] || "internal"
+    aab_path = options[:aab] || "../app/build/outputs/bundle/release/app-release.aab"
+
+    UI.message("🚀 Deploying APZ Wallet to Play Store track: #{track_name}")
+
+    upload_to_play_store(
+      track: track_name,
+      aab: aab_path,
+      json_key: ENV["PLAY_STORE_JSON_KEY_PATH"] || "fastlane/play-store-key.json",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_changelogs: false,
+      release_status: track_name == "production" ? "completed" : "draft",
+      validate_only: false
+    )
+
+    UI.success("✅ Successfully deployed to Play Store (#{track_name})!")
+  end
+
+  # ─────────────────────────────────────────
+  # Lane: Promote to Production
+  # ─────────────────────────────────────────
+  desc "Promote from beta to production"
+  lane :promote_to_production do
+    upload_to_play_store(
+      track: "beta",
+      track_promote_to: "production",
+      json_key: ENV["PLAY_STORE_JSON_KEY_PATH"] || "fastlane/play-store-key.json",
+      skip_upload_metadata: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      skip_upload_apk: true,
+      skip_upload_aab: true
+    )
+    UI.success("✅ Promoted to production!")
+  end
+
+  # ─────────────────────────────────────────
+  # Lane: Validate Metadata Only
+  # ─────────────────────────────────────────
+  desc "Validate Play Store metadata without uploading"
+  lane :validate do
+    upload_to_play_store(
+      json_key: ENV["PLAY_STORE_JSON_KEY_PATH"] || "fastlane/play-store-key.json",
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_images: true,
+      skip_upload_screenshots: true,
+      validate_only: true
+    )
+    UI.success("✅ Metadata validation passed!")
+  end
+
+end
+```
+
+📄 4. android/Gemfile
+
+```ruby
+source "https://rubygems.org"
+
+gem "fastlane", "~> 2.220"
+```
+
+🔐 تنظیم GitHub Secrets
+
+在 Settings → Secrets and variables → Actions 中添加以下 Secrets：
+
+1. PLAY_STORE_JSON_BASE64
+
+从 Google Play Console 创建服务账号并下载 JSON 密钥文件后，转为 Base64：
+
+```bash
+# Linux / macOS
+base64 -w 0 google-play-service-account.json > play-store.base64.txt
+
+# Windows (PowerShell)
+[Convert]::ToBase64String([IO.File]::ReadAllBytes("google-play-service-account.json")) | Out-File -Encoding ASCII play-store.base64.txt
+```
+
+将文件内容粘贴到 PLAY_STORE_JSON_BASE64 中。
+
+2. KEYSTORE_BASE64、KEYSTORE_PASSWORD、KEY_ALIAS、KEY_PASSWORD
+
+与之前 APK 构建工作流相同。
+
+创建 Google Play 服务账号步骤
+
+1. 前往 Google Play Console → Setup → API access
+2. 点击 Create Service Account → 跳转到 Google Cloud Console
+3. 创建服务账号后，在 Keys 标签页点击 Add Key → Create new key
+4. 选择 JSON 格式并下载
+5. 回到 Play Console，在 Users & Permissions 中邀请该服务账号
+6. 授予权限：Release to production, testing tracks 以及 Manage store presence
+
+🚀 使用方式
+
+手动触发
+
+从 Actions → Publish to Play Store → Run workflow 选择 track（internal / alpha / beta / production）执行。
+
+自动触发
+
+创建 GitHub Release 时自动发布到 internal track。
+
+本地测试 Fastlane
+
+```bash
+cd android
+bundle install
+bundle exec fastlane android validate   # 仅验证元数据
+bundle exec fastlane android deploy track:internal  # 发布到内部测试
+```

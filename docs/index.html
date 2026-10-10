@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl" id="html-root">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#05070a" />
+<meta name="description" content="APZ Wallet — Official Release Dashboard" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="APZ Wallet" />
+<meta name="mobile-web-app-capable" content="yes" />
+
+<title>APZ Wallet — Dashboard</title>
+
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 128 128'%3E%3Crect width='128' height='128' rx='28' fill='%2305070a'/%3E%3Cpath d='M40 88 L64 34 L88 88 M48 72 L80 72' stroke='%2300ffcc' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E" />
+
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Vazirmatn:wght@400;600;700;800&family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+/* ═══════════════════════════════════════════════
+   APZ Wallet Dashboard — Single File
+   ═══════════════════════════════════════════════ */
+
+:root {
+  --bg: #05070a;
+  --bg-2: #0a0e14;
+  --bg-3: #0f141c;
+  --surface: rgba(15, 20, 28, 0.7);
+  --surface-2: rgba(20, 28, 38, 0.85);
+  --border: rgba(0, 255, 204, 0.12);
+  --border-hover: rgba(0, 255, 204, 0.35);
+  --neon: #00ffcc;
+  --neon-2: #00b8ff;
+  --neon-3: #a855f7;
+  --danger: #ff3860;
+  --warn: #ffc107;
+  --success: #00ff88;
+  --text: #e6f1ff;
+  --text-dim: #8892b0;
+  --text-dimmer: #4a5568;
+  --radius: 16px;
+  --radius-sm: 10px;
+  --font: 'Vazirmatn', 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+  --transition: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+[dir="ltr"] { --font: 'Inter', system-ui, sans-serif; }
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: var(--font);
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.6;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* ─── Background ─── */
+.bg-gradient {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(ellipse at 20% 0%, rgba(0, 255, 204, 0.08), transparent 50%),
+    radial-gradient(ellipse at 80% 100%, rgba(168, 85, 247, 0.08), transparent 50%),
+    linear-gradient(180deg, var(--bg), var(--bg-2));
+}
+
+/* ─── Header ─── */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  background: rgba(5, 7, 10, 0.8);
+  border-bottom: 1px solid var(--border);
+  padding-top: env(safe-area-inset-top);
+}
+
+.header-inner {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; }
+
+.brand-icon {
+  width: 40px;
+  height: 40px;
+  filter: drop-shadow(0 0 12px rgba(0, 255, 204, 0.6));
+  flex-shrink: 0;
+}
+
+.brand-text h1 {
+  font-size: 1rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--neon), var(--neon-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  white-space: nowrap;
+}
+
+.brand-sub {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.lang-switch {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.lang-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 6px 10px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.lang-btn.active {
+  background: linear-gradient(135deg, var(--neon), var(--neon-2));
+  color: var(--bg);
+  box-shadow: 0 0 12px rgba(0, 255, 204, 0.4);
+}
+
+/* ─── Container ─── */
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px 16px 40px;
+}
+
+/* ─── Search ─── */
+.search-hero {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.search-hero h2 {
+  font-size: 1.3rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  background: linear-gradient(135deg, var(--neon), var(--neon-2));
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  margin-bottom: 6px;
+}
+
+.search-hero p {
+  color: var(--text-dim);
+  font-size: 0.82rem;
+  margin-bottom: 18px;
+}
+
+.search-form {
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 6px;
+  transition: var(--transition);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.3);
+  gap: 6px;
+}
+
+.search-form:focus-within {
+  border-color: var(--neon);
+  box-shadow: 0 0 0 3px rgba(0, 255, 204, 0.1);
+}
+
+.search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  padding: 10px 8px;
+  min-width: 0;
+}
+
+.search-input::placeholder { color: var(--text-dimmer); }
+
+.search-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--neon), var(--neon-2));
+  color: var(--bg);
+  border: none;
+  border-radius: 10px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 4px 16px rgba(0, 255, 204, 0.25);
+  flex-shrink: 0;
+}
+
+.search-btn:active { transform: scale(0.96); }
+
+/* ─── Tabs ─── */
+.tabs {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabs::-webkit-scrollbar { display: none; }
+
+.tab {
+  flex: 1;
+  min-width: max-content;
+  padding: 9px 14px;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  color: var(--text-dim);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  white-space: nowrap;
+}
+
+.tab.active {
+  background: linear-gradient(135deg, rgba(0, 255, 204, 0.15), rgba(0, 184, 255, 0.1));
+  color: var(--neon);
+  box-shadow: 0 0 12px rgba(0, 255, 204, 0.15);
+}
+
+.panel { display: none; animation: fadeIn 300ms; }
+.panel.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Stat Cards ─── */
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  position: relative;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  backdrop-filter: blur(12px);
+  transition: var(--transition);
+  overflow: hidden;
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--neon), transparent);
+  opacity: 0.6;
+}
+
+.stat-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+  font-weight: 700;
+}
+
+.stat-value {
+  font-size: 1.4rem;
+  font-weight: 800;
+  font-family: var(--font-mono);
+  color: var(--text);
+  letter-spacing: -0.02em;
+  word-break: break-all;
+}
+
+.stat-meta {
+  font-size: 0.7rem;
+  color: var(--text-dimmer);
+  margin-top: 4px;
+}
+
+/* ─── Release Card ─── */
+.release-card {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 10px;
+  transition: var(--transition);
+}
+
+.release-card:active { transform: scale(0.99); }
+
+.release-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+  flex-wrap: wrap;
+}
+
+.release-version {
+  font-family: var(--font-mono);
+  font-size: 1rem;
+  font-weight: 800;
+  color: var(--neon);
+}
+
+.release-tag {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  background: rgba(0, 255, 204, 0.08);
+  color: var(--neon);
+  border: 1px solid rgba(0, 255, 204, 0.2);
+}
+
+.release-pre {
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.65rem;
+  background: rgba(255, 193, 7, 0.1);
+  color: var(--warn);
+  border: 1px solid rgba(255, 193, 7, 0.3);
+  font-weight: 700;
+}
+
+.release-meta {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  margin-bottom: 10px;
+}
+
+.release-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: var(--radius-sm);
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: var(--transition);
+  border: 1px solid transparent;
+  text-decoration: none;
+  white-space: nowrap;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--neon), var(--neon-2));
+  color: var(--bg);
+  box-shadow: 0 4px 16px rgba(0, 255, 204, 0.25);
+}
+
+.btn-ghost {
+  background: transparent;
+  border-color: var(--border);
+  color: var(--text-dim);
+}
+
+.btn-ghost:hover { color: var(--neon); border-color: var(--border-hover); }
+
+/* ─── Result Box ─── */
+.result-box {
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-top: 16px;
+}
+
+.result-box.error {
+  background: rgba(255, 56, 96, 0.06);
+  border-color: rgba(255, 56, 96, 0.3);
+}
+
+.result-box.loading {
+  text-align: center;
+  color: var(--text-dim);
+}
+
+.field-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--border);
+}
+
+.field-row:last-child { border-bottom: none; }
+
+.field-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-dimmer);
+  font-weight: 700;
+}
+
+.field-value {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  color: var(--text);
+  word-break: break-all;
+  line-height: 1.5;
+}
+
+.field-value.highlight { color: var(--neon); font-weight: 600; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.badge.success { background: rgba(0, 255, 136, 0.1); color: var(--success); border: 1px solid rgba(0, 255, 136, 0.3); }
+.badge.failed { background: rgba(255, 56, 96, 0.1); color: var(--danger); border: 1px solid rgba(255, 56, 96, 0.3); }
+.badge.pending { background: rgba(255, 193, 7, 0.1); color: var(--warn); border: 1px solid rgba(255, 193, 7, 0.3); }
+.badge.contract { background: rgba(168, 85, 247, 0.1); color: #a855f7; border: 1px solid rgba(168, 85, 247, 0.3); }
+.badge.eoa { background: rgba(0, 255, 204, 0.1); color: var(--neon); border: 1px solid rgba(0, 255, 204, 0.3); }
+
+/* ─── Spinner ─── */
+.spinner {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 3px solid rgba(0, 255, 204, 0.15);
+  border-top-color: var(--neon);
+  animation: spin 1s linear infinite;
+  margin-bottom: 8px;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ─── Network Status ─── */
+.net-status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px;
+  font-size: 0.72rem;
+  color: var(--text-dimmer);
+  font-family: var(--font-mono);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dimmer);
+}
+
+.net-status.online .status-dot { background: var(--success); box-shadow: 0 0 10px var(--success); }
+.net-status.offline .status-dot { background: var(--danger); box-shadow: 0 0 10px var(--danger); }
+
+/* ─── Footer ─── */
+.footer {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--text-dim);
+  font-size: 0.78rem;
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+}
+
+.heart { display: inline-block; animation: beat 1.2s infinite; }
+@keyframes beat { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.2); } }
+
+.footer a { color: var(--neon); text-decoration: none; }
+
+/* ─── Toast ─── */
+.toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(150px);
+  background: rgba(10, 14, 20, 0.95);
+  border: 1px solid var(--border-hover);
+  border-radius: 10px;
+  padding: 12px 20px;
+  font-size: 0.82rem;
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(12px);
+  opacity: 0;
+  transition: all 300ms cubic-bezier(0.4, 0, 0.2, 1);
+  z-index: 9999;
+  pointer-events: none;
+  max-width: calc(100vw - 32px);
+}
+
+.toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+.toast.error { border-color: rgba(255, 56, 96, 0.5); color: #ffb3c1; }
+.toast.success { border-color: rgba(0, 255, 136, 0.5); color: #a0ffd0; }
+
+/* ─── Install Banner ─── */
+.install-banner {
+  position: fixed;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%) translateY(200%);
+  width: calc(100% - 24px);
+  max-width: 420px;
+  z-index: 9998;
+  padding: 14px;
+  background: rgba(10, 14, 20, 0.95);
+  border: 1px solid rgba(0, 255, 204, 0.3);
+  border-radius: 14px;
+  backdrop-filter: blur(20px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: transform 400ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.install-banner.show { transform: translateX(-50%) translateY(0); }
+
+.install-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+
+.install-text { flex: 1; min-width: 0; }
+.install-title { font-size: 0.85rem; font-weight: 700; color: var(--text); }
+.install-sub { font-size: 0.7rem; color: var(--text-dim); }
+
+.install-btn {
+  padding: 8px 14px;
+  background: linear-gradient(135deg, var(--neon), var(--neon-2));
+  color: var(--bg);
+  border: none;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* ─── Responsive ─── */
+@media (min-width: 720px) {
+  .stat-grid { grid-template-columns: repeat(4, 1fr); }
+  .container { padding: 32px 24px 60px; }
+  .brand-text h1 { font-size: 1.1rem; }
+}
+
+@media (max-width: 360px) {
+  .stat-grid { grid-template-columns: 1fr; }
+  .brand-text h1 { font-size: 0.9rem; }
+  .brand-icon { width: 34px; height: 34px; }
+  .lang-btn { padding: 5px 8px; font-size: 0.7rem; }
+}
+</style>
+</head>
+
+<body>
+
+<div class="bg-gradient"></div>
+
+<!-- ═══════════ Header ═══════════ -->
+<header class="header">
+  <div class="header-inner">
+    <div class="brand">
+      <svg class="brand-icon" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+        <rect width="128" height="128" rx="28" fill="#05070a"/>
+        <path d="M40 88 L64 34 L88 88 M48 72 L80 72" stroke="#00ffcc" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+      </svg>
+      <div class="brand-text">
+        <h1>APZ Wallet</h1>
+        <span class="brand-sub" data-i18n="brand.sub">داشبورد انتشار</span>
+      </div>
+    </div>
+
+    <nav class="lang-switch" role="group" aria-label="Language">
+      <button class="lang-btn" data-lang="fa">فا</button>
+      <button class="lang-btn" data-lang="en">EN</button>
+      <button class="lang-btn" data-lang="de">DE</button>
+    </nav>
+  </div>
+</header>
+
+<!-- ═══════════ Main ═══════════ -->
+<main class="container">
+
+  <!-- Tabs -->
+  <div class="tabs" role="tablist">
+    <button class="tab active" data-tab="dashboard" data-i18n="tab.dashboard">داشبورد</button>
+    <button class="tab" data-tab="explorer" data-i18n="tab.explorer">کاوشگر</button>
+    <button class="tab" data-tab="about" data-i18n="tab.about">درباره</button>
+  </div>
+
+  <!-- ═══════════ Dashboard Panel ═══════════ -->
+  <section class="panel active" data-panel="dashboard">
+    <div class="stat-grid">
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="stats.latest">آخرین نسخه</div>
+        <div class="stat-value" id="stat-latest">—</div>
+        <div class="stat-meta" id="stat-latest-date">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="stats.downloads">کل دانلودها</div>
+        <div class="stat-value" id="stat-downloads">—</div>
+        <div class="stat-meta" data-i18n="stats.downloadsSub">در تمام نسخه‌ها</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="stats.releases">انتشارها</div>
+        <div class="stat-value" id="stat-releases">—</div>
+        <div class="stat-meta" data-i18n="stats.releasesSub">در GitHub</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label" data-i18n="stats.status">وضعیت</div>
+        <div class="stat-value"><span class="status-dot" id="net-dot"></span></div>
+        <div class="stat-meta" id="net-text" data-i18n="stats.connecting">در حال اتصال...</div>
+      </div>
+    </div>
+
+    <h3 style="font-size:1rem;font-weight:700;margin:20px 0 12px;" data-i18n="history.title">تاریخچه انتشار</h3>
+    <div id="releases-list">
+      <div class="result-box loading">
+        <div class="spinner"></div>
+        <p data-i18n="history.loading">در حال بارگذاری...</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ═══════════ Explorer Panel ═══════════ -->
+  <section class="panel" data-panel="explorer">
+    <div class="search-hero">
+      <h2 data-i18n="explorer.title">کاوشگر زنجیره APZ</h2>
+      <p data-i18n="explorer.subtitle">جستجو با هش تراکنش، آدرس یا شماره بلاک</p>
+    </div>
+
+    <form class="search-form" id="explorer-form" autocomplete="off">
+      <input
+        type="text"
+        class="search-input"
+        id="explorer-input"
+        placeholder="0x... / apz... / 12345"
+        spellcheck="false"
+        autocomplete="off"
+      />
+      <button type="submit" class="search-btn">
+        <span data-i18n="explorer.search">جستجو</span>
+      </button>
+    </form>
+
+    <div id="explorer-result"></div>
+
+    <div class="net-status" id="net-status">
+      <span class="status-dot"></span>
+      <span data-i18n="explorer.connecting">در حال اتصال به APZ Chain...</span>
+    </div>
+  </section>
+
+  <!-- ═══════════ About Panel ═══════════ -->
+  <section class="panel" data-panel="about">
+    <div class="result-box">
+      <h3 style="font-size:1.1rem;font-weight:800;margin-bottom:12px;color:var(--neon);">APZ Wallet</h3>
+      <p style="color:var(--text-dim);font-size:0.85rem;line-height:1.8;margin-bottom:16px;" data-i18n="about.description">
+        کیف پول رسمی و متن‌باز شبکه APZ Chain. سبک، امن و بدون وابستگی به سرور مرکزی.
+      </p>
+
+      <div class="field-row">
+        <div class="field-label" data-i18n="about.version">نسخه</div>
+        <div class="field-value highlight">1.0.0</div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label" data-i18n="about.author">سازنده</div>
+        <div class="field-value">Khalil Heyrani</div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label" data-i18n="about.license">مجوز</div>
+        <div class="field-value">MIT License</div>
+      </div>
+
+      <div class="field-row">
+        <div class="field-label" data-i18n="about.github">GitHub</div>
+        <div class="field-value">
+          <a href="https://github.com/apzchain/APZ_WALLET" target="_blank" rel="noopener" style="color:var(--neon);">
+            github.com/apzchain/APZ_WALLET
+          </a>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap;">
+        <button class="btn btn-ghost" id="clear-cache-btn">
+          🗑️ <span data-i18n="about.clearCache">پاک کردن کش</span>
+        </button>
+        <button class="btn btn-ghost" id="check-update-btn">
+          🔄 <span data-i18n="about.checkUpdate">بررسی به‌روزرسانی</span>
+        </button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<!-- ═══════════ Footer ═══════════ -->
+<footer class="footer">
+  <p>
+    <span data-i18n="footer.built">ساخته‌شده با</span>
+    <span class="heart">❤️</span>
+    <span data-i18n="footer.by">توسط</span>
+    <a href="https://github.com/apzchain" target="_blank" rel="noopener">Khalil Heyrani</a>
+  </p>
+  <p style="margin-top:6px;">
+    <span data-i18n="footer.for">برای APZ Chain — یک اکوسیستم شفاف، امن و مستقل</span>
+  </p>
+</footer>
+
+<!-- ═══════════ Toast ═══════════ -->
+<div class="toast" id="toast" role="status"></div>
+
+<!-- ═══════════ Install Banner ═══════════ -->
+<div class="install-banner" id="install-banner">
+  <svg class="install-icon" viewBox="0 0 128 128" xmlns="http://www.w3.org/2000/svg">
+    <rect width="128" height="128" rx="28" fill="#0a0e14"/>
+    <path d="M40 88 L64 34 L88 88 M48 72 L80 72" stroke="#00ffcc" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </svg>
+  <div class="install-text">
+    <div class="install-title" data-i18n="install.title">نصب APZ Wallet</div>
+    <div class="install-sub" data-i18n="install.sub">برای دسترسی سریع به صفحه اصلی اضافه کنید</div>
+  </div>
+  <button class="install-btn" id="install-btn" data-i18n="install.btn">نصب</button>
+</div>
+
+<script>
+/* ═══════════════════════════════════════════════
+   APZ Wallet Dashboard — Main Script
+   ═══════════════════════════════════════════════ */
+
+(function () {
+  'use strict';
+
+  // ─── Config ───
+  const CFG = {
+    repo: { owner: 'apzchain', name: 'APZ_WALLET' },
+    rpc: 'https://rpc.apz-chain.org',
+    defaultLang: 'fa',
+    storageKey: 'apz-lang'
+  };
+
+  // ─── i18n ───
+  const I18N = {
+    fa: {
+      dir: 'rtl',
+      brand: { sub: 'داشبورد انتشار' },
+      tab: { dashboard: 'داشبورد', explorer: 'کاوشگر', about: 'درباره' },
+      stats: {
+        latest: 'آخرین نسخه',
+        downloads: 'کل دانلودها',
+        downloadsSub: 'در تمام نسخه‌ها',
+        releases: 'انتشارها',
+        releasesSub: 'در GitHub',
+        status: 'وضعیت',
+        connecting: 'در حال اتصال...'
+      },
+      history: {
+        title: 'تاریخچه انتشار',
+        loading: 'در حال بارگذاری...',
+        empty: 'هنوز نسخه‌ای منتشر نشده است',
+        preRelease: 'پیش‌انتشار',
+        download: 'دانلود APK',
+        notes: 'توضیحات',
+        ago: 'پیش'
+      },
+      explorer: {
+        title: 'کاوشگر زنجیره APZ',
+        subtitle: 'جستجو با هش تراکنش، آدرس یا شماره بلاک',
+        search: 'جستجو',
+        connecting: 'در حال اتصال به APZ Chain...',
+        searching: 'در حال جستجو...',
+        notFound: 'یافت نشد',
+        notFoundSub: 'هیچ نتیجه‌ای مطابق جستجوی شما یافت نشد',
+        networkError: 'خطای شبکه',
+        networkErrorSub: 'اتصال به RPC برقرار نشد',
+        txTitle: 'تراکنش',
+        addressTitle: 'آدرس',
+        blockTitle: 'بلاک',
+        status: 'وضعیت',
+        blockNumber: 'شماره بلاک',
+        from: 'از',
+        to: 'به',
+        value: 'مقدار',
+        gasUsed: 'گس مصرفی',
+        gasPrice: 'قیمت گس',
+        nonce: 'Nonce',
+        balance: 'موجودی',
+        txCount: 'تعداد تراکنش',
+        type: 'نوع',
+        success: 'موفق',
+        failed: 'ناموفق',
+        pending: 'در انتظار',
+        contract: 'قرارداد',
+        eoa: 'حساب کاربری',
+        tryExamples: 'امتحان کنید:',
+        txExample: 'نمونه TX',
+        addrExample: 'نمونه آدرس',
+        blockExample: 'نمونه بلاک'
+      },
+      about: {
+        description: 'کیف پول رسمی و متن‌باز شبکه APZ Chain. سبک، امن و بدون وابستگی به سرور مرکزی.',
+        version: 'نسخه',
+        author: 'سازنده',
+        license: 'مجوز',
+        github: 'GitHub',
+        clearCache: 'پاک کردن کش',
+        checkUpdate: 'بررسی به‌روزرسانی'
+      },
+      footer: {
+        built: 'ساخته‌شده با',
+        by: 'توسط',
+        for: 'برای APZ Chain — یک اکوسیستم شفاف، امن و مستقل'
+      },
+      install: {
+        title: 'نصب APZ Wallet',
+        sub: 'برای دسترسی سریع به صفحه اصلی اضافه کنید',
+        btn: 'نصب'
+      },
+      toast: {
+        refreshed: 'داده‌ها به‌روزرسانی شد',
+        error: 'خطای بارگذاری',
+        copied: 'کپی شد',
+        cleared: 'کش پاک شد',
+        upToDate: 'شما آخرین نسخه را دارید'
+      }
+    },
+    en: {
+      dir: 'ltr',
+      brand: { sub: 'Release Dashboard' },
+      tab: { dashboard: 'Dashboard', explorer: 'Explorer', about: 'About' },
+      stats: {
+        latest: 'Latest Version',
+        downloads: 'Total Downloads',
+        downloadsSub: 'Across releases',
+        releases: 'Releases',
+        releasesSub: 'On GitHub',
+        status: 'Status',
+        connecting: 'Connecting...'
+      },
+      history: {
+        title: 'Release History',
+        loading: 'Loading...',
+        empty: 'No releases yet',
+        preRelease: 'Pre-release',
+        download: 'Download APK',
+        notes: 'Notes',
+        ago: 'ago'
+      },
+      explorer: {
+        title: 'APZ Chain Explorer',
+        subtitle: 'Search by transaction hash, address, or block number',
+        search: 'Search',
+        connecting: 'Connecting to APZ Chain...',
+        searching: 'Searching...',
+        notFound: 'Not Found',
+        notFoundSub: 'No result matches your query',
+        networkError: 'Network Error',
+        networkErrorSub: 'Cannot reach RPC endpoint',
+        txTitle: 'Transaction',
+        addressTitle: 'Address',
+        blockTitle: 'Block',
+        status: 'Status',
+        blockNumber: 'Block Number',
+        from: 'From',
+        to: 'To',
+        value: 'Value',
+        gasUsed: 'Gas Used',
+        gasPrice: 'Gas Price',
+        nonce: 'Nonce',
+        balance: 'Balance',
+        txCount: 'Transactions',
+        type: 'Type',
+        success: 'Success',
+        failed: 'Failed',
+        pending: 'Pending',
+        contract: 'Contract',
+        eoa: 'EOA',
+        tryExamples: 'Try:',
+        txExample: 'Sample TX',
+        addrExample: 'Sample Address',
+        blockExample: 'Sample Block'
+      },
+      about: {
+        description: 'Official open-source wallet for APZ Chain. Lightweight, secure, with no central server dependency.',
+        version: 'Version',
+        author: 'Author',
+        license: 'License',
+        github: 'GitHub',
+        clearCache: 'Clear Cache',
+        checkUpdate: 'Check for Updates'
+      },
+      footer: {
+        built: 'Built with',
+        by: 'by',
+        for: 'for APZ Chain — A transparent, secure, and independent ecosystem'
+      },
+      install: {
+        title: 'Install APZ Wallet',
+        sub: 'Add to home screen for quick access',
+        btn: 'Install'
+      },
+      toast: {
+        refreshed: 'Data refreshed',
+        error: 'Failed to load',
+        copied: 'Copied',
+        cleared: 'Cache cleared',
+        upToDate: 'You have the latest version'
+      }
+    },
+    de: {
+      dir: 'ltr',
+      brand: { sub: 'Release-Dashboard' },
+      tab: { dashboard: 'Dashboard', explorer: 'Explorer', about: 'Über' },
+      stats: {
+        latest: 'Neueste Version',
+        downloads: 'Downloads',
+        downloadsSub: 'Über alle Releases',
+        releases: 'Releases',
+        releasesSub: 'Auf GitHub',
+        status: 'Status',
+        connecting: 'Verbinde...'
+      },
+      history: {
+        title: 'Release-Verlauf',
+        loading: 'Lädt...',
+        empty: 'Noch keine Releases',
+        preRelease: 'Vorabversion',
+        download: 'APK herunterladen',
+        notes: 'Notizen',
+        ago: 'her'
+      },
+      explorer: {
+        title: 'APZ Chain Explorer',
+        subtitle: 'Suche nach Hash, Adresse oder Blocknummer',
+        search: 'Suchen',
+        connecting: 'Verbinde mit APZ Chain...',
+        searching: 'Suche...',
+        notFound: 'Nicht gefunden',
+        notFoundSub: 'Kein Ergebnis für Ihre Suche',
+        networkError: 'Netzwerkfehler',
+        networkErrorSub: 'RPC-Endpunkt nicht erreichbar',
+        txTitle: 'Transaktion',
+        addressTitle: 'Adresse',
+        blockTitle: 'Block',
+        status: 'Status',
+        blockNumber: 'Blocknummer',
+        from: 'Von',
+        to: 'An',
+        value: 'Wert',
+        gasUsed: 'Gas verbraucht',
+        gasPrice: 'Gaspreis',
+        nonce: 'Nonce',
+        balance: 'Guthaben',
+        txCount: 'Transaktionen',
+        type: 'Typ',
+        success: 'Erfolg',
+        failed: 'Fehlgeschlagen',
+        pending: 'Ausstehend',
+        contract: 'Vertrag',
+        eoa: 'EOA',
+        tryExamples: 'Versuchen:',
+        txExample: 'Beispiel TX',
+        addrExample: 'Beispiel Adresse',
+        blockExample: 'Beispiel Block'
+      },
+      about: {
+        description: 'Offizielle Open-Source-Wallet für APZ Chain. Leicht, sicher, ohne zentrale Serverabhängigkeit.',
+        version: 'Version',
+        author: 'Autor',
+        license: 'Lizenz',
+        github: 'GitHub',
+        clearCache: 'Cache leeren',
+        checkUpdate: 'Nach Updates suchen'
+      },
+      footer: {
+        built: 'Erstellt mit',
+        by: 'von',
+        for: 'für APZ Chain — Ein transparentes, sicheres und unabhängiges Ökosystem'
+      },
+      install: {
+        title: 'APZ Wallet installieren',
+        sub: 'Zum Startbildschirm hinzufügen',
+        btn: 'Installieren'
+      },
+      toast: {
+        refreshed: 'Daten aktualisiert',
+        error: 'Laden fehlgeschlagen',
+        copied: 'Kopiert',
+        cleared: 'Cache geleert',
+        upToDate: 'Sie haben die neueste Version'
+      }
+    }
+  };
+
+  // ─── State ───
+  let currentLang = localStorage.getItem(CFG.storageKey) || CFG.defaultLang;
+  if (!I18N[currentLang]) currentLang = 'fa';
+
+  let deferredPrompt = null;
+
+  // ─── Helpers ───
+  const $ = (sel) => document.querySelector(sel);
+  const $$ = (sel) => document.querySelectorAll(sel);
+
+  function t(path) {
+    const dict = I18N[currentLang];
+    return path.split('.').reduce((o, k) => o && o[k], dict) || path;
+  }
+
+  function escapeHtml(str) {
+    return String(str || '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
+  }
+
+  function formatBytes(bytes) {
+    if (!bytes) return '—';
+    const u = ['B', 'KB', 'MB', 'GB'];
+    let i = 0;
+    while (bytes >= 1024 && i < u.length - 1) { bytes /= 1024; i++; }
+    return `${bytes.toFixed(1)} ${u[i]}`;
+  }
+
+  function formatNumber(n) {
+    if (n == null || isNaN(n)) return '—';
+    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
+    return String(n);
+  }
+
+  function timeAgo(dateStr) {
+    if (!dateStr) return '—';
+    const s = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+    const t_ = t('history.ago');
+    if (s < 60) return `${s}s ${t_}`;
+    if (s < 3600) return `${Math.floor(s / 60)}m ${t_}`;
+    if (s < 86400) return `${Math.floor(s / 3600)}h ${t_}`;
+    if (s < 2592000) return `${Math.floor(s / 86400)}d ${t_}`;
+    return `${Math.floor(s / 2592000)}mo ${t_}`;
+  }
+
+  function shortHash(h, n = 8) {
+    if (!h) return '—';
+    if (h.length <= n * 2 + 2) return h;
+    return `${h.slice(0, n + 2)}...${h.slice(-n)}`;
+  }
+
+  function showToast(msg, type = 'success') {
+    const toast = $('#toast');
+    toast.textContent = msg;
+    toast.className = `toast ${type} show`;
+    setTimeout(() => toast.classList.remove('show'), 2600);
+  }
+
+  // ─── Language ───
+  function applyLang(lang) {
+    if (!I18N[lang]) lang = 'fa';
+    currentLang = lang;
+    localStorage.setItem(CFG.storageKey, lang);
+
+    const dict = I18N[lang];
+    const html = $('#html-root');
+    html.lang = lang;
+    html.dir = dict.dir;
+
+    $$('[data-i18n]').forEach((el) => {
+      const key = el.dataset.i18n;
+      const val = t(key);
+      if (val && val !== key) el.textContent = val;
+    });
+
+    $$('.lang-btn').forEach((btn) => {
+      btn.classList.toggle('active', btn.dataset.lang === lang);
+    });
+
+    // Re-render dynamic content
+    if (releasesData.length) renderReleases(releasesData);
+    updateNetworkStatus();
+  }
+
+  function setupLangSwitch() {
+    $$('.lang-btn').forEach((btn) => {
+      btn.addEventListener('click', () => applyLang(btn.dataset.lang));
+    });
+  }
+
+  // ─── Tabs ───
+  function setupTabs() {
+    $$('.tab').forEach((tab) => {
+      tab.addEventListener('click', () => {
+        const target = tab.dataset.tab;
+        $$('.tab').forEach((t_) => t_.classList.toggle('active', t_ === tab));
+        $$('.panel').forEach((p) => p.classList.toggle('active', p.dataset.panel === target));
+      });
+    });
+  }
+
+  // ─── Releases Data ───
+  let releasesData = [];
+
+  async function fetchReleases() {
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${CFG.repo.owner}/${CFG.repo.name}/releases?per_page=30`,
+        { headers: { Accept: 'application/vnd.github+json' } }
+      );
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return (data || []).filter((r) => !r.draft);
+    } catch (err) {
+      console.error('[Releases]', err);
+      // تلاش از cache
+      try {
+        const cached = localStorage.getItem('apz-releases-cache');
+        if (cached) {
+          const { data, time } = JSON.parse(cached);
+          if (Date.now() - time < 24 * 3600 * 1000) return data;
+        }
+      } catch {}
+      return [];
+    }
+  }
+
+  function renderStats(releases) {
+    const latest = releases[0];
+    $('#stat-latest').textContent = latest ? latest.tag_name.replace(/^v/, '') : '—';
+    $('#stat-latest-date').textContent = latest ? timeAgo(latest.published_at) : '—';
+
+    const total = releases.reduce((sum, r) =>
+      sum + (r.assets || []).reduce((s, a) => s + (a.download_count || 0), 0), 0);
+    $('#stat-downloads').textContent = formatNumber(total);
+
+    $('#stat-releases').textContent = releases.length;
+  }
+
+  function renderReleases(releases) {
+    const list = $('#releases-list');
+
+    if (!releases.length) {
+      list.innerHTML = `<div class="result-box loading"><p>${t('history.empty')}</p></div>`;
+      return;
+    }
+
+    list.innerHTML = releases.map((r) => {
+      const apk = (r.assets || []).find((a) => a.name.endsWith('.apk'));
+      const downloadUrl = apk?.browser_download_url || r.html_url;
+      const version = r.tag_name.replace(/^(android-)?v/, '');
+
+      return `
+        <div class="release-card">
+          <div class="release-head">
+            <span class="release-version">v${escapeHtml(version)}</span>
+            <span class="release-tag">${escapeHtml(r.tag_name)}</span>
+            ${r.prerelease ? `<span class="release-pre">${t('history.preRelease')}</span>` : ''}
+          </div>
+          <div class="release-meta">
+            <span>🕐 ${timeAgo(r.published_at)}</span>
+            ${apk ? `<span>📦 ${formatBytes(apk.size)}</span>` : ''}
+            ${apk ? `<span>⬇️ ${formatNumber(apk.download_count || 0)}</span>` : ''}
+          </div>
+          <div class="release-actions">
+            ${apk ? `<a class="btn btn-primary" href="${downloadUrl}" target="_blank" rel="noopener">⬇️ ${t('history.download')}</a>` : ''}
+            <a class="btn btn-ghost" href="${r.html_url}" target="_blank" rel="noopener">${t('history.notes')}</a>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  async function loadReleases(silent = false) {
+    const releases = await fetchReleases();
+    releasesData = releases;
+    renderStats(releases);
+    renderReleases(releases);
+
+    if (releases.length > 0) {
+      try {
+        localStorage.setItem('apz-releases-cache', JSON.stringify({
+          data: releases,
+          time: Date.now()
+        }));
+      } catch {}
+    }
+  }
+
+  // ─── Network Status ───
+  async function updateNetworkStatus() {
+    const dot = $('#net-dot');
+    const text = $('#net-text');
+    const statusBox = $('#net-status');
+
+    try {
+      const res = await fetch(CFG.rpc, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_blockNumber', params: [], id: 1 })
+      });
+      if (!res.ok) throw new Error('RPC error');
+      const json = await res.json();
+      const blockNumber = parseInt(json.result, 16);
+
+      dot.className = 'status-dot';
+      dot.style.background = 'var(--success)';
+      dot.style.boxShadow = '0 0 10px var(--success)';
+      text.textContent = `Block #${blockNumber.toLocaleString('en-US')}`;
+
+      if (statusBox) {
+        statusBox.className = 'net-status online';
+      }
+    } catch (err) {
+      dot.className = 'status-dot';
+      dot.style.background = 'var(--danger)';
+      dot.style.boxShadow = '0 0 10px var(--danger)';
+      text.textContent = navigator.onLine ? t('explorer.networkError') : 'Offline';
+
+      if (statusBox) {
+        statusBox.className = 'net-status offline';
+      }
+    }
+  }
+
+  // ─── Explorer ───
+  const PATTERNS = {
+    txHash: /^0x[a-fA-F0-9]{64}$/,
+    evmAddress: /^0x[a-fA-F0-9]{40}$/,
+    apzAddress: /^apz[a-zA-Z0-9]{38,42}$/,
+    blockNumber: /^\d{1,10}$/,
+    blockHex: /^0x[a-fA-F0-9]{1,10}$/
+  };
+
+  function detectType(input) {
+    const v = String(input || '').trim();
+    if (!v) return null;
+    if (PATTERNS.txHash.test(v)) return 'tx';
+    if (PATTERNS.evmAddress.test(v) || PATTERNS.apzAddress.test(v)) return 'address';
+    if (PATTERNS.blockNumber.test(v) || PATTERNS.blockHex.test(v)) return 'block';
+    return 'unknown';
+  }
+
+  async function rpcCall(method, params) {
+    const res = await fetch(CFG.rpc, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method, params, id: Date.now() })
+    });
+    if (!res.ok) throw new Error(`RPC HTTP ${res.status}`);
+    const json = await res.json();
+    if (json.error) throw new Error(json.error.message || 'RPC error');
+    return json.result;
+  }
+
+  function hexToNumber(hex) {
+    if (!hex) return 0;
+    return parseInt(hex, 16);
+  }
+
+  function weiToAPZ(weiHex) {
+    if (!weiHex) return '0';
+    try {
+      const wei = BigInt(weiHex);
+      const div = 10n ** 18n;
+      const whole = wei / div;
+      const frac = (wei % div).toString().padStart(18, '0').slice(0, 6);
+      return `${whole}.${frac}`;
+    } catch {
+      return '0';
+    }
+  }
+
+  async function explorerSearch(query) {
+    const result = $('#explorer-result');
+    const type = detectType(query);
+
+    result.innerHTML = `
+      <div class="result-box loading">
+        <div class="spinner"></div>
+        <p>${t('explorer.searching')}</p>
+      </div>
+    `;
+
+    try {
+      if (type === 'tx') {
+        const [tx, receipt] = await Promise.all([
+          rpcCall('eth_getTransactionByHash', [query]),
+          rpcCall('eth_getTransactionReceipt', [query])
+        ]);
+
+        if (!tx) throw new Error('TX_NOT_FOUND');
+
+        const status = receipt
+          ? (receipt.status === '0x1' ? 'success' : 'failed')
+          : 'pending';
+
+        result.innerHTML = `
+          <div class="result-box">
+            <div class="field-row">
+              <div class="field-label">${t('explorer.status')}</div>
+              <div><span class="badge ${status}">${t('explorer.' + status)}</span></div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.blockNumber')}</div>
+              <div class="field-value highlight">${tx.blockNumber ? hexToNumber(tx.blockNumber).toLocaleString('en-US') : t('explorer.pending')}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.from')}</div>
+              <div class="field-value">${escapeHtml(tx.from)}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.to')}</div>
+              <div class="field-value">${tx.to ? escapeHtml(tx.to) : '—'}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.value')}</div>
+              <div class="field-value highlight">${weiToAPZ(tx.value)} APZ</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.gasPrice')}</div>
+              <div class="field-value">${tx.gasPrice ? weiToAPZ(tx.gasPrice) + ' APZ' : '—'}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.gasUsed')}</div>
+              <div class="field-value">${receipt ? hexToNumber(receipt.gasUsed).toLocaleString('en-US') : '—'}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.nonce')}</div>
+              <div class="field-value">${tx.nonce ? hexToNumber(tx.nonce) : '—'}</div>
+            </div>
+          </div>
+        `;
+      } else if (type === 'address') {
+        const [balance, nonce, code] = await Promise.all([
+          rpcCall('eth_getBalance', [query, 'latest']),
+          rpcCall('eth_getTransactionCount', [query, 'latest']),
+          rpcCall('eth_getCode', [query, 'latest'])
+        ]);
+
+        const isContract = code && code !== '0x';
+
+        result.innerHTML = `
+          <div class="result-box">
+            <div class="field-row">
+              <div class="field-label">${t('explorer.addressTitle')}</div>
+              <div class="field-value">${escapeHtml(query)}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.balance')}</div>
+              <div class="field-value highlight">${weiToAPZ(balance)} APZ</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.txCount')}</div>
+              <div class="field-value">${hexToNumber(nonce).toLocaleString('en-US')}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.type')}</div>
+              <div><span class="badge ${isContract ? 'contract' : 'eoa'}">${isContract ? t('explorer.contract') : t('explorer.eoa')}</span></div>
+            </div>
+          </div>
+        `;
+      } else if (type === 'block') {
+        const blockHex = PATTERNS.blockNumber.test(query)
+          ? '0x' + Number(query).toString(16)
+          : query;
+
+        const block = await rpcCall('eth_getBlockByNumber', [blockHex, false]);
+        if (!block) throw new Error('BLOCK_NOT_FOUND');
+
+        result.innerHTML = `
+          <div class="result-box">
+            <div class="field-row">
+              <div class="field-label">${t('explorer.blockTitle')}</div>
+              <div class="field-value highlight">#${hexToNumber(block.number).toLocaleString('en-US')}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">Hash</div>
+              <div class="field-value">${escapeHtml(block.hash || '—')}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.txCount')}</div>
+              <div class="field-value">${(block.transactions || []).length}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">Miner</div>
+              <div class="field-value">${escapeHtml(block.miner || '—')}</div>
+            </div>
+            <div class="field-row">
+              <div class="field-label">${t('explorer.gasUsed')}</div>
+              <div class="field-value">${hexToNumber(block.gasUsed).toLocaleString('en-US')}</div>
+            </div>
+          </div>
+        `;
+      } else {
+        throw new Error('UNKNOWN_TYPE');
+      }
+    } catch (err) {
+      console.error('[Explorer]', err);
+      const isNetwork = err.message?.includes('RPC') || err.message?.includes('fetch');
+      result.innerHTML = `
+        <div class="result-box error">
+          <div class="field-row">
+            <div class="field-label">${isNetwork ? t('explorer.networkError') : t('explorer.notFound')}</div>
+            <div class="field-value">${isNetwork ? t('explorer.networkErrorSub') : t('explorer.notFoundSub')}</div>
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  function setupExplorer() {
+    const form = $('#explorer-form');
+    const input = $('#explorer-input');
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const q = input.value.trim();
+      if (q) explorerSearch(q);
+    });
+  }
+
+  // ─── About Actions ───
+  function setupAboutActions() {
+    $('#clear-cache-btn')?.addEventListener('click', () => {
+      try {
+        localStorage.clear();
+        if ('caches' in window) {
+          caches.keys().then((keys) => keys.forEach((k) => caches.delete(k)));
+        }
+        showToast(t('toast.cleared'), 'success');
+      } catch {
+        showToast(t('toast.error'), 'error');
+      }
+    });
+
+    $('#check-update-btn')?.addEventListener('click', async () => {
+      if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({ type: 'SKIP_WAITING' });
+      }
+      loadReleases(true);
+      showToast(t('toast.upToDate'), 'success');
+    });
+  }
+
+  // ─── PWA ───
+  function setupPWA() {
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      setTimeout(() => $('#install-banner').classList.add('show'), 3000);
+    });
+
+    $('#install-btn')?.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      $('#install-banner').classList.remove('show');
+    });
+
+    window.addEventListener('appinstalled', () => {
+      $('#install-banner').classList.remove('show');
+      deferredPrompt = null;
+    });
+  }
+
+  // ─── Init ───
+  async function init() {
+    setupLangSwitch();
+    setupTabs();
+    setupExplorer();
+    setupAboutActions();
+    setupPWA();
+
+    applyLang(currentLang);
+
+    // Load data
+    await loadReleases(true);
+    updateNetworkStatus();
+    setInterval(updateNetworkStatus, 60_000);
+
+    // Refresh on visibility change
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) {
+        loadReleases(true);
+        updateNetworkStatus();
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+})();
+</script>
+
+</body>
+  </html>

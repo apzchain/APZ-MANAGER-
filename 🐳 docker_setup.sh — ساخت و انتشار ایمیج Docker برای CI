@@ -1,0 +1,1472 @@
+🐳 docker_setup.sh — ساخت و انتشار ایمیج Docker برای CI
+
+این اسکریپت همه‌چیز لازم برای اجرای APZ Manager در Docker را می‌سازد:
+
+· ✅ Dockerfile چندمرحله‌ای (slim + full)
+· ✅ Dockerfile.proot برای اجرا در محیط Ubuntu کامل (PDF + YARA)
+· ✅ docker-compose.yml (API + دیتابیس + volume)
+· ✅ .dockerignore بهینه
+· ✅ entrypoint.sh و healthcheck.sh
+· ✅ ساخت ایمیج برای linux/amd64 و linux/arm64 (چندمعماری)
+· ✅ Push به GitHub Container Registry (GHCR) یا Docker Hub
+· ✅ docker_setup.sh که همه‌ی این‌ها را خودکار می‌سازد
+
+---
+
+📄 docker_setup.sh
+
+```bash
+#!/usr/bin/env bash
+# ============================================================
+#  APZ Manager – Docker Bootstrap
+#  ساخت Dockerfile + compose + entrypoint + healthcheck
+#  و بیلد/پوش خودکار ایمیج برای CI
+#  Usage:
+#     bash docker_setup.sh build          # فقط build
+#     bash docker_setup.sh run            # build + run API
+#     bash docker_setup.sh push           # build + push به GHCR
+#     bash docker_setup.sh compose-up     # docker compose up
+#     bash docker_setup.sh clean          # پاک‌سازی
+#  Options:
+#     --registry=ghcr|dockerhub|local     (پیش‌فرض: ghcr)
+#     --tag=1.0.0
+#     --platform=linux/amd64,linux/arm64
+#     --no-cache
+#  Author: APZ Security Team | License: GPLv3
+# ============================================================
+set -euo pipefail
+
+# ---------- پیش‌فرض‌ها ----------
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PKG_NAME="apz-manager"
+DEFAULT_TAG="$(cat "${SCRIPT_DIR}/VERSION" 2>/dev/null | tr -d '[:space:]' || echo '1.0.0')"
+
+REGISTRY="${APZ_DOCKER_REGISTRY:-ghcr}"
+IMAGE_TAG="${APZ_DOCKER_TAG:-${DEFAULT_TAG}}"
+PLATFORMS="${APZ_DOCKER_PLATFORMS:-linux/amd64,linux/arm64}"
+NO_CACHE="${APZ_DOCKER_NO_CACHE:-0}"
+
+# ---------- رنگ‌ها ----------
+c_green()  { printf "\033[1;32m%s\033[0m\n" "$1"; }
+c_yellow() { printf "\033[1;33m%s\033[0m\n" "$1"; }
+c_red()    { printf "\033[1;31m%s\033[0m\n" "$1"; }
+c_cyan()   { printf "\033[1;36m%s\033[0m\n" "$1"; }
+c_bold()   { printf "\033[1m%s\033[0m\n" "$1"; }
+c_dim()    { printf "\033[2m%s\033[0m\n" "$1"; }
+
+# ---------- پارس پرچم‌ها ----------
+ACTION="${1:-build}"
+shift || true
+
+for arg in "$@"; do
+    case "$arg" in
+        --registry=*)  REGISTRY="${arg#*=}" ;;
+        --tag=*)       IMAGE_TAG="${arg#*=}" ;;
+        --platform=*)  PLATFORMS="${arg#*=}" ;;
+        --no-cache)    NO_CACHE=1 ;;
+    esac
+done
+
+banner() {
+    echo "============================================================"
+    echo "   APZ Manager – Docker Bootstrap"
+    echo "   Action: ${ACTION}  |  Tag: ${IMAGE_TAG}"
+    echo "   Registry: ${REGISTRY}"
+    echo "============================================================"
+}
+
+# ============================================================
+#  پیش‌نیازها
+# ============================================================
+preflight() {
+    c_cyan ">>> [0/10] بررسی پیش‌نیازها..."
+
+    if ! command -v docker >/dev/null 2>&1; then
+        c_red "[!] docker نصب نیست."
+        echo "    نصب:"
+        echo "      Linux : curl -fsSL https://get.docker.com | sh"
+        echo "      macOS : brew install --cask docker"
+        echo "      Win   : winget install Docker.DockerDesktop"
+        exit 1
+    fi
+
+    if ! docker info >/dev/null 2>&1; then
+        c_red "[!] Docker daemon در دسترس نیست."
+        exit 1
+    fi
+
+    # docker buildx برای چندمعماری
+    if [ "$PLATFORMS" != "linux/amd64" ] && ! docker buildx version >/dev/null 2>&1; then
+        c_yellow "[!] docker buildx موجود نیست. فقط linux/amd64 ساخته می‌شود."
+        PLATFORMS="linux/amd64"
+    fi
+
+    # docker compose
+    HAS_COMPOSE=0
+    if docker compose version >/dev/null 2>&1; then
+        HAS_COMPOSE=1
+        COMPOSE_CMD="docker compose"
+    elif command -v docker-compose >/dev/null 2>&1; then
+        HAS_COMPOSE=1
+        COMPOSE_CMD="docker-compose"
+    fi
+
+    # تعیین image name
+    if [ "$REGISTRY" = "ghcr" ]; then
+        if command -v gh >/dev/null 2>&1; then
+            GH_USER="$(gh api user --jq .login 2>/dev/null || echo '')"
+        fi
+        GH_USER="${GH_USER:-$(whoami)}"
+        IMAGE_NAME="ghcr.io/${GH_USER,,}/${PKG_NAME}"
+    elif [ "$REGISTRY" = "dockerhub" ]; then
+        DOCKER_USER="${DOCKER_USER:-$(whoami)}"
+        IMAGE_NAME="${DOCKER_USER}/${PKG_NAME}"
+    else
+        IMAGE_NAME="${PKG_NAME}"
+    fi
+
+    c_dim "    [+] image: ${IMAGE_NAME}:${IMAGE_TAG}"
+    c_green "    [+] پیش‌نیازها OK."
+}
+
+# ============================================================
+#  1) .dockerignore
+# ============================================================
+write_dockerignore() {
+    c_cyan ">>> [1/10] نوشتن .dockerignore..."
+    cat > "${SCRIPT_DIR}/.dockerignore" <<'EOF'
+# --- Git ---
+.git
+.gitignore
+.gitattributes
+.github
+
+# --- Python ---
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.coverage
+.tox/
+venv/
+env/
+.venv/
+
+# --- Node ---
+node_modules/
+npm-debug.log
+
+# --- Build artifacts ---
+dist/
+build/
+*.zip
+*.tar.gz
+*.whl
+*.egg
+
+# --- IDE ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Reports & DB (باید حجم image کم بماند) ---
+apz-reports/
+*.db
+*.sqlite
+*.sqlite3
+reports/
+logs/
+*.log
+
+# --- Secrets ---
+.env
+.env.*
+!.env.android.example
+*.key
+*.pem
+secrets/
+
+# --- Android bootstrap files ---
+apz-android/
+docker/
+!docker_setup.sh
+
+# --- Tests & docs (اختیاری) ---
+tests/
+docs/
+*.md
+!README.md
+!LICENSE
+EOF
+    c_green "    [+] .dockerignore نوشته شد."
+}
+
+# ============================================================
+#  2) Dockerfile (main, multi-stage)
+# ============================================================
+write_dockerfile() {
+    c_cyan ">>> [2/10] نوشتن Dockerfile..."
+    cat > "${SCRIPT_DIR}/Dockerfile" <<'EOF_DOCKER'
+# ============================================================
+#  APZ Manager – Production Dockerfile
+#  Multi-stage, distroless-ish, non-root, multi-arch
+# ============================================================
+
+# ----- Stage 1: builder -----
+FROM python:3.11-slim-bookworm AS builder
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# وابستگی‌های ساخت (برای yara-python و androguard)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential \
+        pkg-config \
+        libyara-dev \
+        libxml2-dev \
+        libxslt1-dev \
+        libffi-dev \
+        libjpeg-dev \
+        libfreetype6-dev \
+        zlib1g-dev \
+        libssl-dev \
+        git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# ساخت wheel‌ها (لایه‌بندی برای کش بهتر)
+RUN python -m venv /opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
+RUN pip install --upgrade pip wheel setuptools
+
+COPY requirements-android.txt* requirements.txt* ./
+RUN if [ -f requirements-android.txt ]; then \
+        pip wheel --wheel-dir=/wheels -r requirements-android.txt; \
+    elif [ -f requirements.txt ]; then \
+        pip wheel --wheel-dir=/wheels -r requirements.txt; \
+    else \
+        pip wheel --wheel-dir=/wheels \
+            androguard pyyaml flask sqlalchemy yara-python requests rich; \
+    fi
+
+# ----- Stage 2: runtime -----
+FROM python:3.11-slim-bookworm AS runtime
+
+LABEL org.opencontainers.image.title="APZ Manager" \
+      org.opencontainers.image.description="APK Security Analysis Platform" \
+      org.opencontainers.image.source="https://github.com/your-org/apz-manager" \
+      org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    APZ_HOME=/opt/apz \
+    APZ_DEFAULT_OUTDIR=/data/reports \
+    APZ_DB_PATH=/data/apz.db \
+    APZ_LOG_LEVEL=INFO \
+    APZ_HTTP_HOST=0.0.0.0 \
+    APZ_HTTP_PORT=5000
+
+# وابستگی‌های runtime (بدون build-essential)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libyara9 \
+        libxml2 \
+        libxslt1.1 \
+        libjpeg62-turbo \
+        libfreetype6 \
+        zlib1g \
+        libssl3 \
+        ca-certificates \
+        curl \
+        tini \
+    && rm -rf /var/lib/apt/lists/*
+
+# کاربر non-root
+RUN groupadd -r apz -g 1000 && \
+    useradd  -r -g apz -u 1000 -m -d /home/apz -s /bin/bash apz
+
+# کپی venv از builder
+COPY --from=builder /opt/venv /opt/venv
+
+# کپی wheel‌ها (اختیاری برای نصب افزودنی‌ها)
+COPY --from=builder /wheels /wheels
+RUN chmod -R a+r /wheels
+
+# کپی سورس
+WORKDIR ${APZ_HOME}
+COPY --chown=apz:apz . ${APZ_HOME}
+
+# پوشه‌های داده
+RUN mkdir -p /data/reports /data/logs /data/rules && \
+    chown -R apz:apz /data ${APZ_HOME}
+
+# entrypoint و healthcheck
+COPY --chown=apz:apz docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=apz:apz docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
+
+USER apz
+
+EXPOSE 5000
+
+VOLUME ["/data"]
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD /usr/local/bin/healthcheck.sh
+
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["api"]
+EOF_DOCKER
+    c_green "    [+] Dockerfile نوشته شد."
+}
+
+# ============================================================
+#  3) Dockerfile.proot (برای PDF/weasyprint)
+# ============================================================
+write_dockerfile_proot() {
+    c_cyan ">>> [3/10] نوشتن Dockerfile.proot (با PDF)..."
+
+    # اول Dockerfile.slim برای CI سریع
+    cat > "${SCRIPT_DIR}/Dockerfile.slim" <<'EOF_SLIM'
+# APZ Manager – Slim image (بدون PDF، فقط API + تحلیل)
+FROM python:3.11-alpine AS runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    APZ_HOME=/opt/apz \
+    APZ_DEFAULT_OUTDIR=/data/reports \
+    APZ_DB_PATH=/data/apz.db
+
+RUN apk add --no-cache \
+        yara \
+        libxml2 \
+        libxslt \
+        jpeg \
+        freetype \
+        libffi \
+        openssl \
+        tini \
+        curl \
+        bash
+
+RUN python -m venv /opt/venv
+RUN pip install --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir \
+        androguard pyyaml flask sqlalchemy yara-python requests rich
+
+RUN addgroup -S apz && adduser -S apz -G apz -h /home/apz
+
+WORKDIR ${APZ_HOME}
+COPY --chown=apz:apz . ${APZ_HOME}
+RUN mkdir -p /data/reports /data/logs && chown -R apz:apz /data
+
+COPY --chown=apz:apz docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=apz:apz docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
+
+USER apz
+EXPOSE 5000
+VOLUME ["/data"]
+ENTRYPOINT ["/sbin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["api"]
+EOF_SLIM
+
+    # Dockerfile.proot برای PDF
+    cat > "${SCRIPT_DIR}/Dockerfile.proot" <<'EOF_PROOT'
+# APZ Manager – Full image (PDF + weasyprint + ابزارهای کامل)
+FROM python:3.11-slim-bookworm
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    APZ_HOME=/opt/apz \
+    APZ_DEFAULT_OUTDIR=/data/reports \
+    APZ_DB_PATH=/data/apz.db
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        build-essential pkg-config git \
+        libyara-dev yara \
+        libxml2-dev libxslt1-dev libffi-dev \
+        libjpeg-dev libfreetype6-dev zlib1g-dev \
+        libpango-1.0-0 libpangoft2-1.0-0 libcairo2 \
+        libgdk-pixbuf-2.0-0 libffi8 shared-mime-info \
+        fonts-dejavu fonts-noto-core fonts-noto-color-emoji \
+        tini curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN python -m venv /opt/venv
+RUN pip install --upgrade pip wheel setuptools && \
+    pip install --no-cache-dir \
+        androguard pyyaml flask sqlalchemy yara-python requests rich \
+        weasyprint jinja2
+
+RUN groupadd -r apz -g 1000 && \
+    useradd -r -g apz -u 1000 -m -d /home/apz -s /bin/bash apz
+
+WORKDIR ${APZ_HOME}
+COPY --chown=apz:apz . ${APZ_HOME}
+RUN mkdir -p /data/reports /data/logs /data/rules && chown -R apz:apz /data
+
+COPY --chown=apz:apz docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY --chown=apz:apz docker/healthcheck.sh /usr/local/bin/healthcheck.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/healthcheck.sh
+
+USER apz
+EXPOSE 5000
+VOLUME ["/data"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+    CMD /usr/local/bin/healthcheck.sh
+ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]
+CMD ["api"]
+EOF_PROOT
+    c_green "    [+] Dockerfile.slim و Dockerfile.proot نوشته شدند."
+}
+
+# ============================================================
+#  4) entrypoint.sh
+# ============================================================
+write_entrypoint() {
+    c_cyan ">>> [4/10] نوشتن docker/entrypoint.sh..."
+    mkdir -p "${SCRIPT_DIR}/docker"
+
+    cat > "${SCRIPT_DIR}/docker/entrypoint.sh" <<'EOF_ENTRY'
+#!/usr/bin/env bash
+# ============================================================
+#  APZ Manager – Container entrypoint
+#  Usage inside container:
+#     entrypoint.sh api                              → اجرای API
+#     entrypoint.sh cli --file x.apk --output y.json → تحلیل
+#     entrypoint.sh analyze /path/app.apk            → تحلیل + ذخیره خودکار
+#     entrypoint.sh batch /path/list.txt             → تحلیل دسته‌ای
+#     entrypoint.sh shell                            → bash تعاملی
+# ============================================================
+set -euo pipefail
+
+APZ_HOME="${APZ_HOME:-/opt/apz}"
+APZ_DEFAULT_OUTDIR="${APZ_DEFAULT_OUTDIR:-/data/reports}"
+APZ_DB_PATH="${APZ_DB_PATH:-/data/apz.db}"
+APZ_HTTP_HOST="${APZ_HTTP_HOST:-0.0.0.0}"
+APZ_HTTP_PORT="${APZ_HTTP_PORT:-5000}"
+
+mkdir -p "${APZ_DEFAULT_OUTDIR}" "$(dirname "${APZ_DB_PATH}")" /data/logs /data/rules
+
+cd "${APZ_HOME}"
+
+log()  { printf '\033[1;36m[APZ]\033[0m %s\n' "$*"; }
+err()  { printf '\033[1;31m[APZ]\033[0m %s\n' "$*" >&2; }
+
+CMD="${1:-api}"
+shift || true
+
+case "$CMD" in
+    # ---------- API ----------
+    api|serve)
+        log "Starting RESTful API on ${APZ_HTTP_HOST}:${APZ_HTTP_PORT}"
+        log "  Data dir : ${APZ_DEFAULT_OUTDIR}"
+        log "  Database : ${APZ_DB_PATH}"
+        exec python apz_api.py
+        ;;
+
+    # ---------- CLI pass-through ----------
+    cli)
+        log "Running CLI: $*"
+        exec python apz_manager.py "$@"
+        ;;
+
+    # ---------- تحلیل یک APK ----------
+    analyze)
+        if [ $# -lt 1 ]; then err "Usage: entrypoint.sh analyze /path/app.apk [extra args]"; exit 1; fi
+        APK_PATH="$1"; shift
+        if [ ! -f "${APK_PATH}" ]; then err "APK not found: ${APK_PATH}"; exit 1; fi
+        NAME="$(basename "${APK_PATH}" .apk)"
+        STAMP="$(date +%Y%m%d_%H%M%S)"
+        OUT="${APZ_DEFAULT_OUTDIR}/${NAME}_${STAMP}.json"
+        log "Analyzing: ${APK_PATH}"
+        log "Output   : ${OUT}"
+        exec python apz_manager.py --file "${APK_PATH}" --output "${OUT}" --db "$@"
+        ;;
+
+    # ---------- تحلیل دسته‌ای ----------
+    batch)
+        if [ $# -lt 1 ]; then err "Usage: entrypoint.sh batch /path/list.txt"; exit 1; fi
+        LIST="$1"; shift
+        if [ ! -f "${LIST}" ]; then err "List not found: ${LIST}"; exit 1; fi
+        OUT="${APZ_DEFAULT_OUTDIR}/batch_$(date +%Y%m%d_%H%M%S).json"
+        log "Batch analyzing: ${LIST}"
+        log "Output         : ${OUT}"
+        exec python apz_manager.py --batch "${LIST}" --output "${OUT}" --db "$@"
+        ;;
+
+    # ---------- اسکن پوشه‌ای ----------
+    scan-dir)
+        DIR="${1:-/samples}"
+        shift || true
+        if [ ! -d "${DIR}" ]; then err "Directory not found: ${DIR}"; exit 1; fi
+        log "Scanning directory: ${DIR}"
+        LIST="$(mktemp)"
+        find "${DIR}" -type f -iname '*.apk' > "${LIST}"
+        COUNT="$(wc -l < "${LIST}")"
+        log "Found ${COUNT} APK(s)"
+        if [ "${COUNT}" -eq 0 ]; then err "No APKs found"; exit 0; fi
+        OUT="${APZ_DEFAULT_OUTDIR}/scan_$(date +%Y%m%d_%H%M%S).json"
+        exec python apz_manager.py --batch "${LIST}" --output "${OUT}" --db "$@"
+        ;;
+
+    # ---------- YARA-only ----------
+    yara)
+        TARGET="${1:-/samples}"
+        log "Running YARA against: ${TARGET}"
+        exec yara -r /data/rules "${TARGET}"
+        ;;
+
+    # ---------- shell ----------
+    shell|bash|sh)
+        exec /bin/bash
+        ;;
+
+    # ---------- healthcheck داخلی ----------
+    healthcheck)
+        exec /usr/local/bin/healthcheck.sh
+        ;;
+
+    # ---------- هر چیز دیگر → pass through ----------
+    *)
+        log "Pass-through: ${CMD} $*"
+        exec "${CMD}" "$@"
+        ;;
+esac
+EOF_ENTRY
+    chmod +x "${SCRIPT_DIR}/docker/entrypoint.sh"
+    c_green "    [+] entrypoint.sh نوشته شد."
+}
+
+# ============================================================
+#  5) healthcheck.sh
+# ============================================================
+write_healthcheck() {
+    c_cyan ">>> [5/10] نوشتن docker/healthcheck.sh..."
+    cat > "${SCRIPT_DIR}/docker/healthcheck.sh" <<'EOF_HEALTH'
+#!/usr/bin/env bash
+# ============================================================
+#  APZ Manager – Container healthcheck
+#  بررسی: فرایند اصلی + پاسخ API + دسترسی به دیتابیس
+# ============================================================
+set -uo pipefail
+
+APZ_HTTP_HOST="${APZ_HTTP_HOST:-127.0.0.1}"
+APZ_HTTP_PORT="${APZ_HTTP_PORT:-5000}"
+APZ_DB_PATH="${APZ_DB_PATH:-/data/apz.db}"
+
+FAIL=0
+
+# 1) فرایند python در حال اجرا؟
+if ! pgrep -f "python.*apz" >/dev/null 2>&1; then
+    echo "[!] APZ process not running" >&2
+    FAIL=1
+fi
+
+# 2) پاسخ HTTP (فقط اگر API فعال باشد)
+if command -v curl >/dev/null 2>&1; then
+    if pgrep -f "apz_api.py" >/dev/null 2>&1; then
+        if ! curl -fsS --max-time 4 "http://${APZ_HTTP_HOST}:${APZ_HTTP_PORT}/stats" >/dev/null 2>&1; then
+            # اگر /stats نبود، حداقل پورت باز باشد
+            if ! curl -fsS --max-time 4 "http://${APZ_HTTP_HOST}:${APZ_HTTP_PORT}/" >/dev/null 2>&1; then
+                echo "[!] API not responding" >&2
+                FAIL=1
+            fi
+        fi
+    fi
+fi
+
+# 3) دیتابیس قابل نوشتن؟
+DB_DIR="$(dirname "${APZ_DB_PATH}")"
+if [ ! -w "${DB_DIR}" ]; then
+    echo "[!] DB dir not writable: ${DB_DIR}" >&2
+    FAIL=1
+fi
+
+# 4) پوشه گزارش قابل نوشتن؟
+if [ -n "${APZ_DEFAULT_OUTDIR:-}" ] && [ ! -w "${APZ_DEFAULT_OUTDIR}" ]; then
+    echo "[!] Output dir not writable: ${APZ_DEFAULT_OUTDIR}" >&2
+    FAIL=1
+fi
+
+if [ "${FAIL}" -eq 0 ]; then
+    echo "healthy"
+    exit 0
+fi
+
+echo "unhealthy"
+exit 1
+EOF_HEALTH
+    chmod +x "${SCRIPT_DIR}/docker/healthcheck.sh"
+    c_green "    [+] healthcheck.sh نوشته شد."
+}
+
+# ============================================================
+#  6) docker-compose.yml
+# ============================================================
+write_compose() {
+    c_cyan ">>> [6/10] نوشتن docker-compose.yml..."
+    cat > "${SCRIPT_DIR}/docker-compose.yml" <<'EOF_COMPOSE'
+# ============================================================
+#  APZ Manager – Docker Compose
+#  سرویس‌ها:
+#    - api     : سرور RESTful روی پورت 5000
+#    - worker  : مصرف‌کننده‌ی پوشه‌ی /samples برای تحلیل خودکار
+#    - redis   : (اختیاری) صف کار برای پردازش موازی
+#  داده‌ها:
+#    - apz-data    : گزارش‌ها و دیتابیس
+#    - apz-samples : APKهای ورودی (bind mount)
+#    - apz-rules   : قوانین YARA (bind mount)
+# ============================================================
+version: "3.9"
+
+x-common: &common
+    build:
+        context: .
+        dockerfile: ${DOCKERFILE:-Dockerfile}
+    image: ${APZ_IMAGE:-apz-manager:latest}
+    restart: unless-stopped
+    environment:
+        APZ_DEFAULT_OUTDIR: /data/reports
+        APZ_DB_PATH: /data/apz.db
+        APZ_LOG_LEVEL: ${APZ_LOG_LEVEL:-INFO}
+        APZ_VT_API_KEY: ${APZ_VT_API_KEY:-}
+        APZ_HA_API_KEY: ${APZ_HA_API_KEY:-}
+        APZ_MD_API_KEY: ${APZ_MD_API_KEY:-}
+        APZ_AI_API_KEY: ${APZ_AI_API_KEY:-}
+        APZ_HTTP_HOST: 0.0.0.0
+        APZ_HTTP_PORT: "5000"
+        TZ: ${TZ:-UTC}
+    volumes:
+        - apz-data:/data
+        - ./rules:/data/rules:ro
+    networks:
+        - apz-net
+    healthcheck:
+        test: ["CMD", "/usr/local/bin/healthcheck.sh"]
+        interval: 30s
+        timeout: 5s
+        retries: 3
+        start_period: 20s
+
+services:
+    # ---------- RESTful API ----------
+    api:
+        <<: *common
+        container_name: apz-api
+        command: ["api"]
+        ports:
+            - "${APZ_HTTP_PORT:-5000}:5000"
+        depends_on:
+            redis:
+                condition: service_healthy
+        deploy:
+            resources:
+                limits:
+                    cpus: '2.0'
+                    memory: 2G
+                reservations:
+                    memory: 512M
+
+    # ---------- Worker (اسکن خودکار پوشه samples) ----------
+    worker:
+        <<: *common
+        container_name: apz-worker
+        command: ["scan-dir", "/samples"]
+        environment:
+            APZ_DEFAULT_OUTDIR: /data/reports
+            APZ_DB_PATH: /data/apz.db
+            APZ_VT_API_KEY: ${APZ_VT_API_KEY:-}
+            APZ_HA_API_KEY: ${APZ_HA_API_KEY:-}
+            APZ_MD_API_KEY: ${APZ_MD_API_KEY:-}
+            APZ_AI_API_KEY: ${APZ_AI_API_KEY:-}
+            APZ_SCAN_INTERVAL: ${APZ_SCAN_INTERVAL:-3600}
+        volumes:
+            - apz-data:/data
+            - ./rules:/data/rules:ro
+            - ./samples:/samples:ro
+        depends_on:
+            redis:
+                condition: service_healthy
+        profiles:
+            - worker
+
+    # ---------- Redis (صف) ----------
+    redis:
+        image: redis:7-alpine
+        container_name: apz-redis
+        restart: unless-stopped
+        command: ["redis-server", "--appendonly", "yes", "--save", "60", "1"]
+        volumes:
+            - apz-redis:/data
+        networks:
+            - apz-net
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 10s
+            timeout: 3s
+            retries: 5
+        deploy:
+            resources:
+                limits:
+                    memory: 256M
+
+    # ---------- Optional: pgAdmin/web for future DB ----------
+    # (فعلاً SQLite استفاده می‌شود، این سرویس غیرفعال است)
+    # db:
+    #     image: postgres:16-alpine
+    #     ...
+
+volumes:
+    apz-data:
+        driver: local
+    apz-redis:
+        driver: local
+
+networks:
+    apz-net:
+        driver: bridge
+EOF_COMPOSE
+    c_green "    [+] docker-compose.yml نوشته شد."
+
+    # نسخه‌ی CI-minimal compose
+    cat > "${SCRIPT_DIR}/docker-compose.ci.yml" <<'EOF_CI'
+# ============================================================
+#  APZ Manager – Compose برای CI (بدون سرویس اضافه)
+# ============================================================
+version: "3.9"
+
+services:
+    apz:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        image: apz-manager:ci
+        environment:
+            APZ_DEFAULT_OUTDIR: /data/reports
+            APZ_DB_PATH: /data/apz.db
+            APZ_LOG_LEVEL: INFO
+        volumes:
+            - ./ci-out:/data
+            - ./samples:/samples:ro
+            - ./rules:/data/rules:ro
+        command: ["scan-dir", "/samples"]
+        # اگر exit code 0 برگرداند موفق است
+EOF_CI
+    c_green "    [+] docker-compose.ci.yml نوشته شد."
+}
+
+# ============================================================
+#  7) Makefile.docker
+# ============================================================
+write_makefile_docker() {
+    c_cyan ">>> [7/10] نوشتن Makefile.docker..."
+    cat > "${SCRIPT_DIR}/Makefile.docker" <<'EOF_MKDOCKER'
+# ============================================================
+#  APZ Manager – Docker Make targets
+#  استفاده:  make -f Makefile.docker <target>
+# ============================================================
+IMAGE_NAME   ?= apz-manager
+IMAGE_TAG    ?= latest
+REGISTRY     ?=
+PLATFORMS    ?= linux/amd64,linux/arm64
+DOCKERFILE   ?= Dockerfile
+BUILDX_BUILDER ?= apz-builder
+
+ifeq ($(REGISTRY),)
+FULL_IMAGE := $(IMAGE_NAME):$(IMAGE_TAG)
+else
+FULL_IMAGE := $(REGISTRY)/$(IMAGE_NAME):$(IMAGE_TAG)
+endif
+
+.PHONY: help
+help:
+	@echo "APZ Docker targets:"
+	@echo "  make -f Makefile.docker build         → ساخت ایمیج"
+	@echo "  make -f Makefile.docker build-slim    → ساخت ایمیج slim"
+	@echo "  make -f Makefile.docker build-full    → ساخت ایمیج با PDF"
+	@echo "  make -f Makefile.docker buildx        → ساخت چندمعماری"
+	@echo "  make -f Makefile.docker run           → اجرای API"
+	@echo "  make -f Makefile.docker shell         → bash داخل کانتینر"
+	@echo "  make -f Makefile.docker test          → تست داخل Docker"
+	@echo "  make -f Makefile.docker push          → push به registry"
+	@echo "  make -f Makefile.docker compose-up    → docker compose up"
+	@echo "  make -f Makefile.docker compose-down  → docker compose down"
+	@echo "  make -f Makefile.docker clean         → پاک‌سازی"
+
+.PHONY: build
+build:
+	docker build -t $(FULL_IMAGE) -f $(DOCKERFILE) .
+
+.PHONY: build-slim
+build-slim:
+	docker build -t $(FULL_IMAGE)-slim -f Dockerfile.slim .
+
+.PHONY: build-full
+build-full:
+	docker build -t $(FULL_IMAGE)-full -f Dockerfile.proot .
+
+.PHONY: buildx
+buildx:
+	@docker buildx inspect $(BUILDX_BUILDER) >/dev/null 2>&1 || \
+	    docker buildx create --name $(BUILDX_BUILDER) --use
+	docker buildx build \
+	    --builder $(BUILDX_BUILDER) \
+	    --platform $(PLATFORMS) \
+	    -t $(FULL_IMAGE) \
+	    -f $(DOCKERFILE) \
+	    --push .
+
+.PHONY: run
+run:
+	docker run --rm -it \
+	    -p 5000:5000 \
+	    -v apz-data:/data \
+	    -v $(PWD)/rules:/data/rules:ro \
+	    $(FULL_IMAGE) api
+
+.PHONY: shell
+shell:
+	docker run --rm -it \
+	    --entrypoint /bin/bash \
+	    -v apz-data:/data \
+	    $(FULL_IMAGE)
+
+.PHONY: test
+test:
+	docker run --rm \
+	    -v $(PWD)/samples:/samples:ro \
+	    -v $(PWD)/ci-out:/data \
+	    $(FULL_IMAGE) scan-dir /samples
+
+.PHONY: push
+push: build
+	docker push $(FULL_IMAGE)
+
+.PHONY: compose-up
+compose-up:
+	docker compose up -d --build
+
+.PHONY: compose-down
+compose-down:
+	docker compose down
+
+.PHONY: clean
+clean:
+	docker image rm -f $(FULL_IMAGE) 2>/dev/null || true
+	docker image rm -f $(FULL_IMAGE)-slim 2>/dev/null || true
+	docker image rm -f $(FULL_IMAGE)-full 2>/dev/null || true
+	docker volume rm -f apz-data apz-redis 2>/dev/null || true
+EOF_MKDOCKER
+    c_green "    [+] Makefile.docker نوشته شد."
+}
+
+# ============================================================
+#  8) workflow برای GitHub Actions (docker publish)
+# ============================================================
+write_docker_workflow() {
+    c_cyan ">>> [8/10] نوشتن .github/workflows/docker.yml..."
+    mkdir -p "${SCRIPT_DIR}/.github/workflows"
+
+    cat > "${SCRIPT_DIR}/.github/workflows/docker.yml" <<'EOF_GH'
+name: Docker
+
+on:
+  push:
+    branches: [ main ]
+    tags: [ 'v*.*.*' ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata (tags, labels)
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{major}}
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push (multi-arch)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
+
+      - name: Build and push (slim variant)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.slim
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:slim
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:slim-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build and push (full/PDF variant)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.proot
+          platforms: linux/amd64,linux/arm64
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:full
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:full-${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Image digest
+        run: echo "Digest: ${{ steps.build.outputs.digest }}"
+
+  smoke-test:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Pull image (amd64)
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:sha-${{ github.sha }} || \
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+      - name: Run healthcheck
+        run: |
+          IMAGE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest"
+          docker run --rm -d --name apz-smoke -p 5000:5000 "$IMAGE" api
+          sleep 8
+          curl -fsS http://localhost:5000/stats || true
+          docker logs apz-smoke
+          docker stop apz-smoke
+EOF_GH
+    c_green "    [+] docker.yml نوشته شد."
+}
+
+# ============================================================
+#  9) build (اجرای Docker)
+# ============================================================
+do_build() {
+    c_cyan ">>> [9/10] ساخت ایمیج..."
+    cd "${SCRIPT_DIR}"
+
+    local extra=""
+    [ "$NO_CACHE" = "1" ] && extra="--no-cache"
+
+    # بررسی Dockerfile
+    if [ ! -f Dockerfile ]; then
+        c_red "[!] Dockerfile پیدا نشد."
+        exit 1
+    fi
+
+    # تعیین buildx
+    if [ "$PLATFORMS" != "linux/amd64" ] && docker buildx version >/dev/null 2>&1; then
+        c_dim "    استفاده از buildx برای: ${PLATFORMS}"
+        docker buildx inspect apz-builder >/dev/null 2>&1 || \
+            docker buildx create --name apz-builder --use
+        docker buildx build \
+            --builder apz-builder \
+            --platform "${PLATFORMS}" \
+            $extra \
+            -t "${IMAGE_NAME}:${IMAGE_TAG}" \
+            -t "${IMAGE_NAME}:latest" \
+            --load \
+            -f Dockerfile \
+            .
+    else
+        c_dim "    ساخت تک‌معماری: linux/amd64"
+        docker build \
+            $extra \
+            -t "${IMAGE_NAME}:${IMAGE_TAG}" \
+            -t "${IMAGE_NAME}:latest" \
+            -f Dockerfile \
+            .
+    fi
+
+    c_green "    [+] ایمیج ساخته شد: ${IMAGE_NAME}:${IMAGE_TAG}"
+
+    # نمایش اندازه
+    local size
+    size="$(docker image inspect "${IMAGE_NAME}:${IMAGE_TAG}" --format='{{.Size}}' 2>/dev/null | awk '{printf "%.1f MB", $1/1024/1024}')"
+    c_dim "    حجم: ${size}"
+}
+
+# ============================================================
+#  10) push به registry
+# ============================================================
+do_push() {
+    c_cyan ">>> [10/10] Push به ${REGISTRY}..."
+
+    if [ "$REGISTRY" = "ghcr" ]; then
+        if command -v gh >/dev/null 2>&1; then
+            echo "$(gh auth token)" | docker login ghcr.io -u "${GH_USER}" --password-stdin
+        else
+            c_yellow "[!] gh موجود نیست، docker login دستی لازم است."
+        fi
+    elif [ "$REGISTRY" = "dockerhub" ]; then
+        if [ -n "${DOCKER_PAT:-}" ]; then
+            echo "$DOCKER_PAT" | docker login -u "${DOCKER_USER}" --password-stdin
+        else
+            c_yellow "[!] DOCKER_PAT تنظیم نشده."
+            docker login
+        fi
+    fi
+
+    docker tag "${IMAGE_NAME}:${IMAGE_TAG}" "${IMAGE_NAME}:latest"
+    docker push "${IMAGE_NAME}:${IMAGE_TAG}"
+    docker push "${IMAGE_NAME}:latest"
+
+    c_green "    [+] Push انجام شد: ${IMAGE_NAME}:${IMAGE_TAG}"
+}
+
+# ============================================================
+#  run / compose-up / clean
+# ============================================================
+do_run() {
+    c_cyan ">>> اجرای API روی http://localhost:5000"
+    docker run --rm -it \
+        -p 5000:5000 \
+        -v apz-data:/data \
+        -v "$(pwd)/rules:/data/rules:ro" \
+        -e APZ_VT_API_KEY="${APZ_VT_API_KEY:-}" \
+        -e APZ_HA_API_KEY="${APZ_HA_API_KEY:-}" \
+        -e APZ_MD_API_KEY="${APZ_MD_API_KEY:-}" \
+        -e APZ_AI_API_KEY="${APZ_AI_API_KEY:-}" \
+        "${IMAGE_NAME}:${IMAGE_TAG}" api
+}
+
+do_compose_up() {
+    c_cyan ">>> Docker Compose up..."
+    if [ "$HAS_COMPOSE" != "1" ]; then
+        c_red "[!] docker compose موجود نیست."; exit 1
+    fi
+    cd "${SCRIPT_DIR}"
+    $COMPOSE_CMD up -d --build
+    c_green "    [+] سرویس‌ها بالا آمدند."
+    $COMPOSE_CMD ps
+}
+
+do_clean() {
+    c_cyan ">>> پاک‌سازی..."
+    docker image rm -f "${IMAGE_NAME}:${IMAGE_TAG}" 2>/dev/null || true
+    docker image rm -f "${IMAGE_NAME}:latest" 2>/dev/null || true
+    docker image rm -f "${IMAGE_NAME}:slim" 2>/dev/null || true
+    docker image rm -f "${IMAGE_NAME}:full" 2>/dev/null || true
+    docker volume rm -f apz-data apz-redis 2>/dev/null || true
+    docker builder prune -f --filter "until=24h" 2>/dev/null || true
+    c_green "    [+] تمام."
+}
+
+# ============================================================
+#  summary
+# ============================================================
+summary() {
+    echo
+    echo "============================================================"
+    c_green "   ✅ Docker setup کامل شد"
+    echo "============================================================"
+    echo "   فایل‌های ساخته‌شده:"
+    echo "     Dockerfile              ← ایمیج اصلی"
+    echo "     Dockerfile.slim         ← ایمیج کوچک (Alpine)"
+    echo "     Dockerfile.proot        ← ایمیج کامل (PDF/weasyprint)"
+    echo "     docker-compose.yml      ← API + worker + redis"
+    echo "     docker-compose.ci.yml   ← نسخه CI"
+    echo "     Makefile.docker         ← اهداف Make"
+    echo "     docker/entrypoint.sh    ← ورودی کانتینر"
+    echo "     docker/healthcheck.sh   ← بررسی سلامت"
+    echo "     .dockerignore"
+    echo "     .github/workflows/docker.yml"
+    echo
+    echo "   ▸ دستورات سریع:"
+    echo "       bash docker_setup.sh build"
+    echo "       bash docker_setup.sh run"
+    echo "       bash docker_setup.sh compose-up"
+    echo "       bash docker_setup.sh push --registry=ghcr"
+    echo
+    echo "   ▸ با Make:"
+    echo "       make -f Makefile.docker build"
+    echo "       make -f Makefile.docker buildx"
+    echo "       make -f Makefile.docker run"
+    echo
+    echo "   ▸ اجرای مستقیم تحلیل:"
+    echo "       docker run --rm -v \$PWD/samples:/samples:ro \\"
+    echo "           ${IMAGE_NAME}:${IMAGE_TAG} scan-dir /samples"
+    echo "============================================================"
+}
+
+# ============================================================
+#  main
+# ============================================================
+main() {
+    banner
+    preflight
+
+    # همیشه فایل‌ها را می‌سازیم (اگر نبودند)
+    write_dockerignore
+    write_dockerfile
+    write_dockerfile_proot
+    write_entrypoint
+    write_healthcheck
+    write_compose
+    write_makefile_docker
+    write_docker_workflow
+
+    case "$ACTION" in
+        build)
+            do_build
+            summary
+            ;;
+        run)
+            do_build
+            do_run
+            ;;
+        push)
+            do_build
+            do_push
+            summary
+            ;;
+        compose-up|up)
+            do_compose_up
+            summary
+            ;;
+        compose-down|down)
+            do_compose_down 2>/dev/null || $COMPOSE_CMD down
+            c_green "[+] سرویس‌ها خاموش شدند."
+            ;;
+        clean)
+            do_clean
+            ;;
+        gen|generate)
+            c_green "[+] فقط فایل‌ها ساخته شدند (بدون build)."
+            summary
+            ;;
+        *)
+            echo "Usage: bash docker_setup.sh <build|run|push|compose-up|compose-down|clean|gen> [options]"
+            exit 1
+            ;;
+    esac
+}
+
+main
+```
+
+---
+
+📂 فایل‌های ساخته‌شده پس از اجرا
+
+```
+پروژه/
+├── Dockerfile                 ← ایمیج اصلی (multi-stage)
+├── Dockerfile.slim            ← ایمیج کوچک Alpine (~150MB)
+├── Dockerfile.proot           ← ایمیج کامل با PDF (~700MB)
+├── docker-compose.yml         ← API + worker + redis
+├── docker-compose.ci.yml      ← نسخه‌ی سبک برای CI
+├── Makefile.docker            ← اهداف Make
+├── .dockerignore
+├── docker/
+│   ├── entrypoint.sh
+│   └── healthcheck.sh
+└── .github/workflows/
+    └── docker.yml             ← build+push خودکار
+```
+
+---
+
+🚀 نحوه‌ی استفاده
+
+۱) ساخت فایل‌ها (بدون بیلد)
+
+```bash
+chmod +x docker_setup.sh
+bash docker_setup.sh gen
+```
+
+۲) Build ایمیج اصلی
+
+```bash
+bash docker_setup.sh build
+# یا
+make -f Makefile.docker build
+```
+
+۳) اجرای API
+
+```bash
+bash docker_setup.sh run
+# → http://localhost:5000/stats
+```
+
+۴) Docker Compose (API + worker + Redis)
+
+```bash
+bash docker_setup.sh compose-up
+docker compose logs -f api
+docker compose down
+```
+
+۵) Push به GHCR
+
+```bash
+bash docker_setup.sh push --registry=ghcr --tag=1.0.0
+```
+
+۶) Push به Docker Hub
+
+```bash
+export DOCKER_PAT="dckr_pat_xxxxx"
+export DOCKER_USER="youruser"
+bash docker_setup.sh push --registry=dockerhub --tag=1.0.0
+```
+
+۷) ساخت چندمعماری (amd64 + arm64)
+
+```bash
+bash docker_setup.sh build --platform=linux/amd64,linux/arm64
+```
+
+---
+
+🧪 تست سریع در CI
+
+```bash
+# 1) APK نمونه را در samples/ بریزید
+mkdir -p samples rules ci-out
+cp /path/to/sample.apk samples/
+
+# 2) اجرا
+docker run --rm \
+    -v "$PWD/samples:/samples:ro" \
+    -v "$PWD/rules:/data/rules:ro" \
+    -v "$PWD/ci-out:/data" \
+    apz-manager:latest scan-dir /samples
+
+# 3) گزارش‌ها در ci-out/ ساخته می‌شوند
+ls -lh ci-out/
+```
+
+---
+
+🎯 حالت‌های entrypoint.sh
+
+دستور داخل کانتینر کار
+api سرور RESTful روی پورت 5000
+cli --file x.apk --output y.json اجرای مستقیم CLI
+analyze /path/app.apk تحلیل + ذخیره‌ی خودکار
+batch /path/list.txt تحلیل دسته‌ای
+scan-dir /samples اسکن پوشه‌ای (خودکار)
+yara /samples فقط اجرای YARA
+shell bash تعاملی
+healthcheck بررسی سلامت
+
+نمونه:
+
+```bash
+docker run --rm -v "$PWD/samples:/samples:ro" apz-manager:latest analyze /samples/app.apk
+docker run --rm -v "$PWD/samples:/samples:ro" apz-manager:latest scan-dir /samples
+docker run --rm -it apz-manager:latest shell
+```
+
+---
+
+🔐 متغیرهای محیطی پشتیبانی‌شده
+
+متغیر کاربرد پیش‌فرض
+APZ_DEFAULT_OUTDIR مسیر گزارش‌ها /data/reports
+APZ_DB_PATH مسیر SQLite /data/apz.db
+APZ_LOG_LEVEL سطح لاگ INFO
+APZ_HTTP_HOST آدرس bind 0.0.0.0
+APZ_HTTP_PORT پورت API 5000
+APZ_VT_API_KEY VirusTotal –
+APZ_HA_API_KEY Hybrid Analysis –
+APZ_MD_API_KEY MetaDefender –
+APZ_AI_API_KEY OpenAI –
+
+استفاده در docker run:
+
+```bash
+docker run --rm -p 5000:5000 \
+    -e APZ_VT_API_KEY="xxxx" \
+    -e APZ_LOG_LEVEL="DEBUG" \
+    -v apz-data:/data \
+    apz-manager:latest api
+```
+
+---
+
+🏷️ تفاوت سه ایمیج
+
+ایمیج حجم تقریبی PDF YARA سرعت build
+:latest (Dockerfile) ~450 MB ❌ ✅ متوسط
+:slim (Dockerfile.slim) ~150 MB ❌ ✅ سریع
+:full (Dockerfile.proot) ~700 MB ✅ ✅ کند
+
+انتخاب سریع:
+
+· CI/CD سریع → :slim
+· استفاده‌ی عمومی → :latest
+· گزارش PDF می‌خواهید → :full
+
+---
+
+🔄 گردش کار GitHub Actions (docker.yml)
+
+```
+push به main یا tag v*.*.*
+    ↓
+Buildx با QEMU (amd64 + arm64)
+    ↓
+├→ ghcr.io/USER/apz-manager:latest
+├→ ghcr.io/USER/apz-manager:slim
+├→ ghcr.io/USER/apz-manager:full
+├→ ghcr.io/USER/apz-manager:1.0.0
+└→ ghcr.io/USER/apz-manager:sha-abc1234
+    ↓
+Smoke test: اجرای API + curl /stats
+```
+
+استفاده روی سرور CI:
+
+```yaml
+- name: Pull APZ image
+  run: docker pull ghcr.io/your-org/apz-manager:latest
+
+- name: Analyze APK
+  run: |
+    docker run --rm \
+        -v "$PWD/app.apk:/samples/app.apk:ro" \
+        -v "$PWD/reports:/data" \
+        ghcr.io/your-org/apz-manager:latest \
+        analyze /samples/app.apk
+```
+
+---
+
+🧩 یکپارچه‌سازی با پکیج قبلی
+
+در bootstrap.sh می‌توانید docker_setup.sh را هم اضافه کنید:
+
+```bash
+FILES=(Makefile VERSION .gitignore LICENSE README_ANDROID.md
+       apz_android.sh setup_proot.sh run_android.sh
+       requirements-android.txt report_generator_patch.py
+       patch_apz_manager.py .env.android.example build_zip.sh
+       release.sh ci_setup.sh docker_setup.sh)     # ← اضافه شد
+```
+
+و در write_files:
+
+```bash
+# ---------- docker_setup.sh ----------
+if [ -f "${SCRIPT_DIR}/docker_setup.sh" ]; then
+    cp -p "${SCRIPT_DIR}/docker_setup.sh" "${PKG_DIR}/"
+fi
+```
+
+---
+
+📋 چک‌لیست نهایی Docker
+
+☐ docker_setup.sh در ریشه پروژه است
+☐ bash docker_setup.sh gen فایل‌ها را می‌سازد
+☐ bash docker_setup.sh build با موفقیت اجرا شد
+☐ docker run ... analyze /samples/app.apk گزارش تولید می‌کند
+☐ bash docker_setup.sh compose-up سرویس‌ها را بالا می‌آورد
+☐ curl http://localhost:5000/stats پاسخ می‌دهد
+☐ bash docker_setup.sh push --registry=ghcr تصویر را push می‌کند
+☐ GitHub Actions → Docker workflow موفق است
+☐ ایمیج روی arm64 هم اجرا می‌شود (اگر buildx ساخت)
+
+---
+
+🎬 چرخه‌ی کامل توسعه تا CI
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  توسعه‌دهنده:                                                    │
+│    git commit && git push                                       │
+│                                                                 │
+│  GitHub Actions:                                                │
+│    ├── test.yml        → تست Python 3.9–3.12                    │
+│    ├── codeql.yml      → اسکن امنیتی                            │
+│    ├── docker.yml      → build + push به ghcr (amd64/arm64)     │
+│    └── release.yml     → ZIP + GitHub Release                   │
+│                                                                 │
+│  سرور CI (Jenkins/GitLab/…):                                    │
+│    docker pull ghcr.io/org/apz-manager:latest                   │
+│    docker run ... scan-dir /samples                             │
+│                                                                 │
+│  گوشی اندروید:                                                  │
+│    curl .../releases/.../apz-android-v1.0.0.zip                 │
+│    unzip && make install                                        │
+└─────────────────────────────────────────────────────────────────┘
+```

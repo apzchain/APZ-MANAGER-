@@ -1,0 +1,8 @@
+```bash
+# کلون پروژه
+git clone https://github.com/your-org/apz-manager.git
+cd apz-manager
+
+# ساخت پوشه‌ی اندروید
+mkdir -p apz-android
+```

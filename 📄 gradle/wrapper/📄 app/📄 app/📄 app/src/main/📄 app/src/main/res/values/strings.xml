@@ -1,0 +1,29 @@
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">APZ Manager</string>
+
+    <string name="nav_home">خانه</string>
+    <string name="nav_history">تاریخچه</string>
+    <string name="nav_settings">تنظیمات</string>
+
+    <string name="home_title">تحلیل امنیتی APK</string>
+    <string name="home_subtitle">ترکیب تحلیل ایستا، YARA، MITRE و فیوژن ریسک — کاملاً روی دستگاه</string>
+
+    <string name="btn_select_apk">انتخاب APK</string>
+    <string name="btn_analyze">شروع تحلیل</string>
+    <string name="btn_cancel">لغو</string>
+    <string name="btn_share">اشتراک‌گذاری</string>
+    <string name="btn_export_json">خروجی JSON</string>
+    <string name="btn_delete">حذف</string>
+
+    <string name="settings_title">تنظیمات</string>
+    <string name="settings_ai">فعال‌سازی AI</string>
+    <string name="settings_reputation">اعتبارسنجی آنلاین</string>
+    <string name="settings_yara">اسکن YARA</string>
+    <string name="settings_vt_key">کلید VirusTotal</string>
+    <string name="settings_ha_key">کلید Hybrid Analysis</string>
+    <string name="settings_md_key">کلید MetaDefender</string>
+    <string name="settings_save">ذخیره</string>
+</resources>
+```

@@ -1,0 +1,338 @@
+برای ساخت APK واقعی از فایل HTML، دو مسیر اصلی وجود دارد: Capacitor (توصیه‌شده) و Cordova. هر دو ابزار WebView اپلیکیشن شما را در یک پوسته‌ی Native اندروید قرار می‌دهند.
+
+---
+
+⚖️ انتخاب بین Capacitor و Cordova
+
+Capacitor استاندارد مدرن سال ۲۰۲۶ برای ساخت اپ‌های هیبریدی است. معماری آن از APIهای Promise-based استفاده می‌کند که سریع‌تر و ساده‌تر از bridge قدیمی Cordova عمل می‌کند. Capacitor از نسخه ۸ (دسامبر ۲۰۲۵) پشتیبانی فعال دارد و توسط تیم Ionic نگهداری می‌شود. Cordova همچنان کار می‌کند اما به‌عنوان یک تکنولوژی legacy شناخته می‌شود و برای پروژه‌های جدید توصیه نمی‌شود.
+
+در این راهنما، Capacitor را توصیه می‌کنیم و هر دو روش را توضیح می‌دهیم.
+
+---
+
+🅰️ روش ۱: Capacitor (توصیه‌شده)
+
+📋 پیش‌نیازها
+
+```bash
+# Node.js 18+ (توصیه: 20)
+node --version
+
+# JDK 17
+java --version
+
+# Android Studio (شامل Android SDK)
+# از developer.android.com/studio دانلود کنید
+```
+
+گام ۱: ساخت پوشه پروژه
+
+```bash
+mkdir apz-wallet-app
+cd apz-wallet-app
+```
+
+گام ۲: ساخت پوشه www و قرار دادن فایل HTML
+
+```bash
+mkdir www
+# فایل apz-wallet.html را به www/index.html تغییر نام دهید و داخل پوشه www قرار دهید
+cp /path/to/apz-wallet.html www/index.html
+```
+
+گام ۳: نصب Capacitor
+
+```bash
+npm init -y
+npm install @capacitor/core @capacitor/cli @capacitor/android
+```
+
+گام ۴: مقداردهی اولیه Capacitor
+
+```bash
+npx cap init "APZ Wallet" "org.apzchain.wallet" --web-dir=www
+```
+
+این دستور یک فایل capacitor.config.json ایجاد می‌کند:
+
+```json
+{
+  "appId": "org.apzchain.wallet",
+  "appName": "APZ Wallet",
+  "webDir": "www",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "SplashScreen": {
+      "launchAutoHide": true,
+      "backgroundColor": "#05070a",
+      "showSpinner": false,
+      "androidScaleType": "CENTER_CROP"
+    },
+    "StatusBar": {
+      "style": "DARK",
+      "backgroundColor": "#05070a"
+    }
+  }
+}
+```
+
+گام ۵: افزودن پلتفرم Android
+
+```bash
+npx cap add android
+```
+
+گام ۶: همگام‌سازی و ساخت APK
+
+```bash
+# همگام‌سازی فایل‌های web با پروژه Android
+npx cap sync android
+
+# ساخت APK دیباگ
+cd android
+./gradlew assembleDebug
+
+# APK در این مسیر ساخته می‌شود:
+# android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+گام ۷: ساخت APK ریلیز (امضاشده)
+
+```bash
+# ساخت keystore (یک بار)
+keytool -genkeypair -v \
+  -keystore apz-release.keystore \
+  -alias apz-wallet \
+  -keyalg RSA -keysize 4096 \
+  -validity 10000
+
+# ساخت APK ریلیز
+cd android
+./gradlew assembleRelease
+
+# APK در این مسیر است:
+# android/app/build/outputs/apk/release/app-release-unsigned.apk
+```
+
+برای امضا، فایل android/app/build.gradle را ویرایش کنید:
+
+```gradle
+android {
+    signingConfigs {
+        release {
+            storeFile file("../../apz-release.keystore")
+            storePassword "YOUR_PASSWORD"
+            keyAlias "apz-wallet"
+            keyPassword "YOUR_KEY_PASSWORD"
+        }
+    }
+    buildTypes {
+        release {
+            signingConfig signingConfigs.release
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+    }
+}
+```
+
+سپس دوباره ./gradlew assembleRelease را اجرا کنید. APK امضاشده در android/app/build/outputs/apk/release/app-release.apk خواهد بود.
+
+گام ۸: نصب روی گوشی
+
+```bash
+adb install android/app/build/outputs/apk/release/app-release.apk
+```
+
+---
+
+🅱️ روش ۲: Cordova
+
+گام ۱: نصب Cordova CLI
+
+```bash
+npm install -g cordova
+```
+
+گام ۲: ساخت پروژه
+
+```bash
+cordova create apz-wallet org.apzchain.wallet "APZ Wallet"
+cd apz-wallet
+```
+
+گام ۳: افزودن پلتفرم Android
+
+```bash
+cordova platform add android
+```
+
+گام ۴: جایگزینی فایل HTML
+
+```bash
+# فایل تولیدشده را حذف و فایل خود را جایگزین کنید
+rm -rf www/*
+cp /path/to/apz-wallet.html www/index.html
+```
+
+گام ۵: ویرایش config.xml
+
+```xml
+<?xml version='1.0' encoding='utf-8'?>
+<widget id="org.apzchain.wallet" version="1.0.0"
+        xmlns="http://www.w3.org/ns/widgets"
+        xmlns:cdv="http://cordova.apache.org/ns/1.0">
+
+    <name>APZ Wallet</name>
+    <description>Official Wallet for APZ Chain</description>
+    <author email="hello@apzchain.org" href="https://apzchain.org">Khalil Heyrani</author>
+
+    <content src="index.html" />
+
+    <preference name="DisallowOverscroll" value="true" />
+    <preference name="android-minSdkVersion" value="24" />
+    <preference name="android-targetSdkVersion" value="34" />
+    <preference name="BackgroundColor" value="0xff05070a" />
+    <preference name="Orientation" value="portrait" />
+    <preference name="Fullscreen" value="false" />
+    <preference name="SplashScreenDelay" value="2000" />
+    <preference name="AutoHideSplashScreen" value="true" />
+
+    <platform name="android">
+        <preference name="android-windowSoftInputMode" value="adjustResize" />
+        <allow-intent href="market:*" />
+    </platform>
+</widget>
+```
+
+گام ۶: ساخت APK دیباگ
+
+```bash
+cordova build android
+# APK در: platforms/android/app/build/outputs/apk/debug/app-debug.apk
+```
+
+گام ۷: ساخت APK ریلیز
+
+```bash
+cordova build android --release -- \
+  --keystore="../../apz-release.keystore" \
+  --storePassword="YOUR_PASSWORD" \
+  --alias="apz-wallet" \
+  --password="YOUR_KEY_PASSWORD"
+
+# APK در: platforms/android/app/build/outputs/apk/release/app-release.apk
+```
+
+---
+
+⚙️ تنظیمات ویژه برای APZ Wallet
+
+افزودن مجوزها (Capacitor — android/app/src/main/AndroidManifest.xml)
+
+```xml
+<uses-permission android:name="android.permission.INTERNET" />
+<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+<uses-permission android:name="android.permission.VIBRATE" />
+```
+
+پشتیبانی از RTL و فونت فارسی (Capacitor)
+
+در فایل www/index.html، مطمئن شوید فونت Vazirmatn از CDN لود می‌شود (همان‌طور که در فایل HTML دارید). در محیط Native، نیاز به اینترنت دارید. برای آفلاین بودن، فونت را لوکال کنید:
+
+```bash
+# دانلود فونت
+mkdir -p www/fonts
+curl -L -o www/fonts/Vazirmatn-Regular.woff2 \
+  "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/fonts/webfonts/Vazirmatn-Regular.woff2"
+```
+
+سپس در CSS:
+
+```css
+@font-face {
+  font-family: 'Vazirmatn';
+  src: url('fonts/Vazirmatn-Regular.woff2') format('woff2');
+  font-weight: 400;
+  font-display: swap;
+}
+```
+
+پشتیبانی از Safe Area (نوچ و نوار gesture)
+
+در فایل HTML دارید viewport-fit=cover. اضافه کنید به CSS:
+
+```css
+body {
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+```
+
+افزودن Splash Screen و آیکون
+
+```bash
+# نصب پلاگین
+npm install @capacitor/splash-screen @capacitor/status-bar
+
+# کپی assets
+mkdir -p resources
+cp assets/highres-icon.png resources/icon.png
+cp assets/highres-icon.png resources/splash.png
+
+# تولید آیکون‌ها (نیاز به cordova-res)
+npm install -g cordova-res
+cordova-res android --skip-config --copy
+```
+
+---
+
+📦 خروجی نهایی
+
+پس از اجرای موفق، فایل‌های زیر ساخته می‌شوند:
+
+فایل مسیر حجم تقریبی
+APK دیباگ android/app/build/outputs/apk/debug/app-debug.apk ~۴ MB
+APK ریلیز android/app/build/outputs/apk/release/app-release.apk ~۳ MB
+AAB (برای Play Store) android/app/build/outputs/bundle/release/app-release.aab ~۲.۵ MB
+
+---
+
+🚀 اسکریپت خودکار ساخت (اختیاری)
+
+فایل build.sh در ریشه پروژه:
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_NAME="APZ Wallet"
+PACKAGE="org.apzchain.wallet"
+
+echo "📱 Building $APP_NAME..."
+
+# ۱. همگام‌سازی
+npx cap sync android
+
+# ۲. ساخت APK دیباگ
+cd android
+./gradlew assembleDebug
+
+# ۳. کپی APK به ریشه
+cp app/build/outputs/apk/debug/app-debug.apk ../apz-wallet-debug.apk
+
+echo "✅ APK ساخته شد: apz-wallet-debug.apk"
+echo "📦 حجم: $(du -h ../apz-wallet-debug.apk | cut -f1)"
+```
+
+اجرا:
+
+```bash
+chmod +x build.sh
+./build.sh
+```

@@ -1,0 +1,56 @@
+```
+apz-android/
+├── build.gradle.kts
+├── settings.gradle.kts
+├── gradle.properties
+├── gradle/wrapper/gradle-wrapper.properties
+├── app/
+│   ├── build.gradle.kts
+│   ├── proguard-rules.pro
+│   └── src/main/
+│       ├── AndroidManifest.xml
+│       ├── kotlin/com/apz/manager/
+│       │   ├── APZApplication.kt
+│       │   ├── MainActivity.kt
+│       │   ├── data/
+│       │   │   ├── model/Report.kt
+│       │   │   ├── model/RiskLevel.kt
+│       │   │   ├── prefs/AppPreferences.kt
+│       │   │   ├── repository/AnalysisRepository.kt
+│       │   │   └── repository/HistoryRepository.kt
+│       │   ├── python/
+│       │   │   └── PythonBridge.kt
+│       │   ├── ui/
+│       │   │   ├── theme/Color.kt
+│       │   │   ├── theme/Theme.kt
+│       │   │   ├── theme/Type.kt
+│       │   │   ├── navigation/NavGraph.kt
+│       │   │   ├── screens/HomeScreen.kt
+│       │   │   ├── screens/AnalysisScreen.kt
+│       │   │   ├── screens/ReportScreen.kt
+│       │   │   ├── screens/HistoryScreen.kt
+│       │   │   ├── screens/SettingsScreen.kt
+│       │   │   └── components/RiskBadge.kt
+│       │   └── util/
+│       │       ├── FileUtils.kt
+│       │       └── JsonUtils.kt
+│       ├── python/
+│       │   ├── apz_android.py
+│       │   ├── axml_parser.py
+│       │   ├── risk_fusion_engine.py
+│       │   ├── threat_platform.py
+│       │   ├── reputation_engine.py
+│       │   ├── ai_analyzer.py
+│       │   ├── database.py
+│       │   ├── logger.py
+│       │   └── rules/android_rules.yar
+│       └── res/
+│           ├── values/strings.xml
+│           ├── values/themes.xml
+│           ├── xml/file_paths.xml
+│           ├── xml/backup_rules.xml
+│           ├── xml/data_extraction_rules.xml
+│           ├── mipmap-anydpi-v26/ic_launcher.xml
+│           ├── drawable/ic_launcher_foreground.xml
+│           └── values/colors.xml
+```
