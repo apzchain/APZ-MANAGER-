@@ -1,4 +1,3 @@
-📦 فایل کامل README.md — APZ Manager
 
 ```markdown
 <div align="center">
