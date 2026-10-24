@@ -1,4 +1,4 @@
-# Security Policy
+SECURITY.md# Security Policy
 
 ## Supported Versions
 
