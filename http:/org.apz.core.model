@@ -1,0 +1,213 @@
+package org.apz.core.model
+
+import android.content.pm.PackageInfo
+import android.graphics.drawable.Drawable
+import kotlinx.parcelize.Parcelize
+import android.os.Parcelable
+
+@Parcelize
+data class AppInfo(
+    val packageName: String,
+    val name: String,
+    val versionName: String,
+    val versionCode: Long,
+    val icon: Drawable?,
+    val installTime: Long,
+    val updateTime: Long,
+    val targetSdk: Int,
+    val minSdk: Int,
+    val permissions: List<String>,
+    val requestedPermissions: List<String>,
+    val activities: List<String>,
+    val services: List<String>,
+    val receivers: List<String>,
+    val providers: List<String>,
+    val signature: String?,
+    val isSystemApp: Boolean,
+    val isEnabled: Boolean,
+    val sourceDir: String,
+    val dataDir: String?,
+    val size: Long,
+    val cacheSize: Long,
+    val dataSize: Long
+) : Parcelable
+
+@Parcelize
+data class BackupInfo(
+    val packageName: String,
+    val appName: String,
+    val versionName: String,
+    val versionCode: Long,
+    val backupTime: Long,
+    val backupSize: Long,
+    val backupPath: String,
+    val includesData: Boolean,
+    val includesObb: Boolean,
+    val isEncrypted: Boolean,
+    val signatureHash: String
+) : Parcelable
+
+enum class RiskLevel(val color: Int, val description: String) {
+    LOW(0xFF4CAF50, "امن"),
+    MEDIUM(0xFFFFC107, "متوسط"),
+    HIGH(0xFFFF9800, "پرریسک"),
+    CRITICAL(0xFFF44336, "خطرناک")
+}
+
+@Parcelize
+data class SecurityScanResult(
+    val riskLevel: RiskLevel,
+    val score: Int,
+    val warnings: List<SecurityWarning>,
+    val recommendations: List<String>,
+    val permissionAnalysis: PermissionAnalysis
+) : Parcelable
+
+@Parcelize
+data class SecurityWarning(
+    val type: WarningType,
+    val title: String,
+    val description: String,
+    val severity: RiskLevel
+) : Parcelable
+
+@Parcelize
+data class PermissionAnalysis(
+    val dangerousPermissions: List<PermissionInfo>,
+    val normalPermissions: List<PermissionInfo>,
+    val signaturePermissions: List<PermissionInfo>,
+    val unusualCombinations: List<String>
+) : Parcelable
+
+@Parcelize
+data class PermissionInfo(
+    val name: String,
+    val group: String,
+    val description: String,
+    val risk: RiskLevel
+) : Parcelable
+
+enum class WarningType {
+    DANGEROUS_PERMISSIONS,
+    NETWORK_ACCESS,
+    BACKGROUND_ACTIVITY,
+    BOOT_COMPLETED,
+    DEVICE_ADMIN,
+    ACCESSIBILITY_SERVICE,
+    UNUSUAL_COMBINATION,
+    SUSPICIOUS_ACTIVITY
+}plugins {
+    id("com.android.application")
+    id("org.jetbrains.kotlin.android")
+    id("kotlin-parcelize")
+    id("kotlin-kapt")
+}
+
+android {
+    namespace = "org.apz.manager"
+    compileSdk = 34
+
+    defaultConfig {
+        applicationId = "org.apz.manager"
+        minSdk = 26
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0.0-beta"
+        
+        testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        vectorDrawables {
+            useSupportLibrary = true
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        debug {
+            isDebuggable = true
+            applicationIdSuffix = ".debug"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildFeatures {
+        compose = true
+        buildConfig = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.4"
+    }
+
+    packaging {
+        resources {
+            excludes += "/META-INF/{AL2.0,LGPL2.1}"
+        }
+    }
+}
+
+dependencies {
+    // Android Core
+    implementation("androidx.core:core-ktx:1.12.0")
+    implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
+    implementation("androidx.activity:activity-compose:1.8.1")
+    implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")
+    
+    // Compose
+    implementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    implementation("androidx.compose.ui:ui")
+    implementation("androidx.compose.ui:ui-graphics")
+    implementation("androidx.compose.ui:ui-tooling-preview")
+    implementation("androidx.compose.material3:material3")
+    implementation("androidx.compose.material:material-icons-extended")
+    
+    // Navigation
+    implementation("androidx.navigation:navigation-compose:2.7.5")
+    
+    // Security
+    implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.biometric:biometric:1.1.0")
+    
+    // Room Database
+    implementation("androidx.room:room-runtime:2.6.0")
+    implementation("androidx.room:room-ktx:2.6.0")
+    kapt("androidx.room:room-compiler:2.6.0")
+    
+    // Dependency Injection
+    implementation("io.insert-koin:koin-android:3.5.0")
+    implementation("io.insert-koin:koin-androidx-compose:3.5.0")
+    
+    // File Operations
+    implementation("commons-io:commons-io:2.15.1")
+    implementation("com.google.code.gson:gson:2.10.1")
+    
+    // APK Analysis
+    implementation("net.dongliu:apk-parser:2.6.10")
+    
+    // Shizuku API (برای دسترسی پیشرفته)
+    implementation("dev.rikka.shizuku:api:13.1.5")
+    implementation("dev.rikka.shizuku:provider:13.1.5")
+    
+    // Testing
+    testImplementation("junit:junit:4.13.2")
+    androidTestImplementation("androidx.test.ext:junit:1.1.5")
+    androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
+    androidTestImplementation(platform("androidx.compose:compose-bom:2023.10.01"))
+    androidTestImplementation("androidx.compose.ui:ui-test-junit4")
+    debugImplementation("androidx.compose.ui:ui-tooling")
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
