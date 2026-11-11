@@ -1,0 +1,277 @@
+تست زبان‌ها:package org.apz.manager.ui
+
+import android.content.Context
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import org.apz.manager.util.LocaleManager
+
+@Composable
+fun SettingsScreen(onBack: () -> Unit) {
+    val context = LocalContext.current
+    var currentLanguage by remember { mutableStateOf(LocaleManager.getPersistedLanguage(context)) }
+    
+    Scaffold(
+        topBar = {
+            CenterAlignedTopAppBar(
+                title = { Text(stringResource(androidx.compose.ui.R.string.settings)) },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "بازگشت")
+                    }
+                }
+            )
+        }
+    ) { padding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(padding)
+        ) {
+            item {
+                SettingsCategory(title = "عمومی")
+            }
+            
+            item {
+                LanguageSettingItem(
+                    currentLanguage = currentLanguage,
+                    onLanguageSelected = { newLanguage ->
+                        currentLanguage = newLanguage
+                        LocaleManager.setLocale(context, newLanguage)
+                        // ری‌استارت اپلیکیشن برای اعمال تغییرات
+                        // (در پروژه واقعی نیاز به راه‌اندازی مجدد است)
+                    }
+                )
+            }
+            
+            item {
+                SettingsCategory(title = "امنیت")
+            }
+            
+            item {
+                SecuritySettingsItem()
+            }
+            
+            item {
+                SettingsCategory(title = "درباره")
+            }
+            
+            item {
+                AboutSection()
+            }
+        }
+    }
+}
+
+@Composable
+fun SettingsCategory(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(16.dp)
+    )
+}
+
+@Composable
+fun LanguageSettingItem(
+    currentLanguage: String,
+    onLanguageSelected: (String) -> Unit
+) {
+    var showLanguageDialog by remember { mutableStateOf(false) }
+    val supportedLanguages = LocaleManager.getSupportedLanguages()
+    val currentLang = supportedLanguages.find { it.code == currentLanguage }
+    
+    Card(
+        onClick = { showLanguageDialog = true },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "زبان / Language",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = currentLang?.nativeName ?: "English",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(Icons.Default.Language, contentDescription = null)}
+    }
+    
+    if (showLanguageDialog) {
+        LanguageSelectionDialog(
+            currentLanguage = currentLanguage,
+            supportedLanguages = supportedLanguages,
+            onLanguageSelected = { language ->
+                onLanguageSelected(language)
+                showLanguageDialog = false
+            },
+            onDismiss = { showLanguageDialog = false }
+        )
+    }
+}
+
+@Composable
+fun LanguageSelectionDialog(
+    currentLanguage: String,
+    supportedLanguages: List<org.apz.manager.util.Language>,
+    onLanguageSelected: (String) -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("انتخاب زبان / Select Language") },
+        text = {
+            Column {
+                supportedLanguages.forEach { language ->
+                    LanguageOption(
+                        language = language,
+                        isSelected = language.code == currentLanguage,
+                        onClick = { onLanguageSelected(language.code) }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("انصراف / Cancel")
+            }
+        }
+    )
+}
+
+@Composable
+fun LanguageOption(
+    language: org.apz.manager.util.Language,
+    isSelected: Boolean,
+    onClick: () -> Unit
+) {
+    Card(
+        onClick = onClick,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 4.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = if (isSelected) MaterialTheme.colorScheme.primaryContainer 
+            else MaterialTheme.colorScheme.surface
+        )
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = language.nativeName,
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = language.englishName,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            
+            if (isSelected) {
+                Icon(
+                    Icons.Default.Check,
+                    contentDescription = "انتخاب شده",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+        }
+    }
+}
+
+@Composable
+fun SecuritySettingsItem() {
+    Card(
+        onClick = { /* Navigate to security settings */ },
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp),
+        elevation = CardDefaults.cardElevation(2.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    text = "تنظیمات امنیتی",
+                    style = MaterialTheme.typography.bodyLarge,
+                    fontWeight = FontWeight.Medium
+                )
+                Text(
+                    text = "مدیریت تحلیل امنیتی و هشدارها",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Icon(Icons.Default.Security, contentDescription = null)
+        }
+    }
+}
+
+@Composable
+fun AboutSection() {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        elevation = CardDefaults.cardElevation(2.dp)) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(
+                text = "درباره مدیر APZ",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+            
+            Text(
+                text = "نسخه: 1.0.0-beta",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = "توسعه‌دهنده: تیم APZ",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                text = "مجوز: GPLv3",
+                style = MaterialTheme.typography.bodyMedium
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Text(
+                text = "مدیر APZ یک برنامه متن‌باز برای مدیریت حرفه‌ای اپلیکیشن‌های اندروید با تمرکز بر امنیت و حریم خصوصی است.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}⚙️ صفحه تنظیمات زبان
+
+app/src/main/java/org/apz/manager/ui/SettingsScreen.kt
