@@ -1,0 +1,93 @@
+package org.apz.manager.feature.security
+
+import android.content.Context
+import android.content.pm.PackageManager
+import net.dongliu.apk.parser.ApkFile
+import net.dongliu.apk.parser.bean.ApkMeta
+import org.apz.core.model.*
+import org.apz.core.constants.PermissionGroups
+import java.io.File
+
+class SecurityAnalyzer(private val context: Context) {
+    
+    suspend fun analyzeApk(apkFile: File): SecurityScanResult {
+        return try {
+            ApkFile(apkFile).use { apk ->
+                val meta = apk.apkMeta
+                val manifest = apk.manifest
+                
+                // تحلیل مجوزها
+                val permissionAnalysis = analyzePermissions(meta.usesPermissions)
+                
+                // تشخیص خطرات
+                val warnings = detectWarnings(meta, permissionAnalysis)
+                
+                // محاسبه امتیاز ریسک
+                val riskScore = calculateRiskScore(warnings, permissionAnalysis)
+                val riskLevel = determineRiskLevel(riskScore)
+                
+                SecurityScanResult(
+                    riskLevel = riskLevel,
+                    score = riskScore,
+                    warnings = warnings,
+                    recommendations = generateRecommendations(warnings),
+                    permissionAnalysis = permissionAnalysis
+                )
+            }
+        } catch (e: Exception) {
+            // تحلیل پایه در صورت خطا
+            SecurityScanResult(
+                riskLevel = RiskLevel.MEDIUM,
+                score = 50,
+                warnings = listOf(
+                    SecurityWarning(
+                        type = WarningType.SUSPICIOUS_ACTIVITY,
+                        title = "خطا در تحلیل امنیتی",
+                        description = "امکان تحلیل کامل APK وجود ندارد",
+                        severity = RiskLevel.MEDIUM
+                    )
+                ),
+                recommendations = listOf("این فایل را از منابع معتبر دریافت کنید"),
+                permissionAnalysis = PermissionAnalysis(
+                    dangerousPermissions = emptyList(),
+                    normalPermissions = emptyList(),
+                    signaturePermissions = emptyList(),
+                    unusualCombinations = emptyList()
+                )
+            )
+        }
+    }
+    
+    fun analyzeInstalledApp(packageName: String): SecurityScanResult {
+        return try {
+            val packageInfo = context.packageManager.getPackageInfo(
+                packageName, 
+                PackageManager.GET_PERMISSIONS or 
+                PackageManager.GET_SIGNATURES
+            )
+            
+            val permissions = packageInfo.requestedPermissions ?: emptyArray()
+            val permissionAnalysis = analyzePermissions(permissions.toList())
+            
+            val warnings = detectInstalledAppWarnings(packageInfo, permissionAnalysis)
+            val riskScore = calculateRiskScore(warnings, permissionAnalysis)
+            val riskLevel = determineRiskLevel(riskScore)
+            
+            SecurityScanResult(
+                riskLevel = riskLevel,
+                score = riskScore,
+                warnings = warnings,
+                recommendations = generateRecommendations(warnings),
+                permissionAnalysis = permissionAnalysis
+            )
+        } catch (e: Exception) {
+            SecurityScanResult(
+                riskLevel = RiskLevel.MEDIUM,
+                score = 50,
+                warnings = emptyList(),
+                recommendations = emptyList(),
+                permissionAnalysis = PermissionAnalysis(
+                    dangerousPermissions = emptyList(),
+                    normalPermissions = emptyList(),
+                    signaturePermissions = emptyList(),
+                    unusualCombinations = emptyList()
